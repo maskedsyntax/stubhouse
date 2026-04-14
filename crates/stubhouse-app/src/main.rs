@@ -1,18 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use bytes::Bytes;
-use serde::{Deserialize, Serialize};
-use stubhouse_core::{send, Method, Request, Response};
-
-#[derive(Debug, Deserialize)]
-struct RequestDto {
-    method: Method,
-    url: String,
-    #[serde(default)]
-    headers: Vec<(String, String)>,
-    #[serde(default)]
-    body: Option<String>,
-}
+use serde::Serialize;
+use stubhouse_core::{send, Compose, Response};
 
 #[derive(Debug, Serialize)]
 struct ResponseDto {
@@ -37,14 +26,9 @@ impl From<Response> for ResponseDto {
 }
 
 #[tauri::command]
-async fn send_request(req: RequestDto) -> Result<ResponseDto, String> {
-    let core_req = Request {
-        method: req.method,
-        url: req.url,
-        headers: req.headers,
-        body: req.body.map(|s| Bytes::from(s.into_bytes())),
-    };
-    send(core_req).await.map(ResponseDto::from).map_err(|e| e.to_string())
+async fn send_request(req: Compose) -> Result<ResponseDto, String> {
+    let wire = req.build().map_err(|e| e.to_string())?;
+    send(wire).await.map(ResponseDto::from).map_err(|e| e.to_string())
 }
 
 fn main() {
