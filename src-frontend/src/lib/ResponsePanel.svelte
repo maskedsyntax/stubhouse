@@ -9,6 +9,9 @@
 
   let { response, error, loading }: Props = $props();
 
+  type Tab = "body" | "headers";
+  let activeTab: Tab = $state("body");
+
   function statusTone(status: number): string {
     if (status >= 500) return "bg-red-900/60 text-red-200 border-red-700";
     if (status >= 400) return "bg-amber-900/60 text-amber-200 border-amber-700";
@@ -51,12 +54,36 @@
       <span class="ml-auto text-neutral-600">{response.headers.length} headers</span>
     </header>
 
-    <div class="flex flex-1 flex-col overflow-hidden">
-      <div class="border-b border-neutral-800 px-3 py-1 text-[10px] uppercase tracking-widest text-neutral-500">
-        Body
-      </div>
-      <pre class="flex-1 overflow-auto p-3 text-xs leading-relaxed text-neutral-100">{tryPrettyJson(response.body)}</pre>
+    <div class="flex items-center gap-1 border-b border-neutral-800 px-2 pt-1">
+      {#each [{ id: "body" as Tab, label: "Body" }, { id: "headers" as Tab, label: "Headers" }] as t (t.id)}
+        <button
+          onclick={() => (activeTab = t.id)}
+          class="border-b-2 px-3 py-1.5 text-[11px] uppercase tracking-widest
+                 {activeTab === t.id
+                   ? 'border-indigo-500 text-neutral-100'
+                   : 'border-transparent text-neutral-500 hover:text-neutral-300'}"
+        >
+          {t.label}
+        </button>
+      {/each}
     </div>
+
+    {#if activeTab === "body"}
+      <pre class="flex-1 overflow-auto p-3 text-xs leading-relaxed text-neutral-100">{tryPrettyJson(response.body)}</pre>
+    {:else}
+      <div class="flex-1 overflow-auto">
+        <table class="w-full text-xs">
+          <tbody>
+            {#each response.headers as [k, v], i (i)}
+              <tr class="border-b border-neutral-900">
+                <td class="w-1/3 px-3 py-1.5 align-top text-neutral-400">{k}</td>
+                <td class="px-3 py-1.5 align-top text-neutral-100 break-all">{v}</td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+    {/if}
   {:else}
     <div class="flex flex-1 items-center justify-center text-neutral-600">
       no response yet

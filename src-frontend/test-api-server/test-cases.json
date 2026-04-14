@@ -1,0 +1,35 @@
+[
+  {
+    "name": "GET Request with Params",
+    "url": "http://localhost:3000/get?foo=bar&baz=qux",
+    "method": "GET"
+  },
+  {
+    "name": "POST JSON Body",
+    "url": "http://localhost:3000/post",
+    "method": "POST",
+    "body": { "foo": "bar" }
+  },
+  {
+    "name": "Bearer Auth (Unauthorized)",
+    "url": "http://localhost:3000/auth/bearer",
+    "method": "GET",
+    "expected": "401"
+  },
+  {
+    "name": "Bearer Auth (Authorized)",
+    "url": "http://localhost:3000/auth/bearer",
+    "method": "GET",
+    "headers": { "Authorization": "Bearer MySecretToken" }
+  },
+  {
+    "name": "Status 404",
+    "url": "http://localhost:3000/status/404",
+    "method": "GET"
+  },
+  {
+    "name": "Delay 2 seconds",
+    "url": "http://localhost:3000/delay/2000",
+    "method": "GET"
+  }
+]
