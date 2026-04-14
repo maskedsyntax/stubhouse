@@ -1,12 +1,13 @@
 <script lang="ts">
-  import type { RequestDefinition } from "./api";
+  import type { HistoryReplay, RequestDefinition } from "./api";
   import { workspace } from "./workspaceStore.svelte";
 
   type Props = {
     onLoad: (def: RequestDefinition, id: string) => void;
+    onReplay: (replay: HistoryReplay) => void;
   };
 
-  let { onLoad }: Props = $props();
+  let { onLoad, onReplay }: Props = $props();
 
   const grouped = $derived.by(() => {
     const map = new Map<string, typeof workspace.entries>();
@@ -23,8 +24,34 @@
     if (def) onLoad(def, id);
   }
 
+  async function handleHistoryClick(id: number) {
+    const replay = await workspace.replayHistory(id);
+    if (replay) onReplay(replay);
+  }
+
   async function pickWorkspace() {
     await workspace.pickAndOpen();
+  }
+
+  async function confirmClear() {
+    if (confirm("Clear all request history for this workspace?")) {
+      await workspace.wipeHistory();
+    }
+  }
+
+  function timeAgo(tsSec: number): string {
+    const diff = Math.max(0, Math.floor(Date.now() / 1000) - tsSec);
+    if (diff < 60) return `${diff}s`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h`;
+    return `${Math.floor(diff / 86400)}d`;
+  }
+
+  function statusColor(s: number): string {
+    if (s >= 200 && s < 300) return "text-emerald-400";
+    if (s >= 300 && s < 400) return "text-sky-400";
+    if (s >= 400 && s < 500) return "text-amber-400";
+    return "text-red-400";
   }
 </script>
 
@@ -90,6 +117,47 @@
           </ul>
         </div>
       {/each}
+    {/if}
+
+    {#if workspace.info}
+      <div class="mt-3 border-t border-neutral-800 px-2 pb-2 pt-3">
+        <div class="flex items-center justify-between px-1">
+          <div class="text-[9px] uppercase tracking-widest text-neutral-500">History</div>
+          {#if workspace.history.length > 0}
+            <button
+              onclick={confirmClear}
+              title="Clear history"
+              class="text-[9px] uppercase tracking-widest text-neutral-600 hover:text-red-400"
+            >
+              Clear
+            </button>
+          {/if}
+        </div>
+        {#if workspace.history.length === 0}
+          <div class="px-1 py-2 text-[10px] text-neutral-600">
+            No requests sent yet.
+          </div>
+        {:else}
+          <ul class="mt-1">
+            {#each workspace.history as h (h.id)}
+              <li>
+                <button
+                  onclick={() => handleHistoryClick(h.id)}
+                  class="block w-full rounded px-2 py-1 text-left hover:bg-neutral-800"
+                  title={h.url}
+                >
+                  <div class="flex items-center gap-2">
+                    <span class="font-mono text-[9px] font-semibold text-neutral-400">{h.method}</span>
+                    <span class="font-mono text-[9px] {statusColor(h.status)}">{h.status}</span>
+                    <span class="ml-auto text-[9px] text-neutral-600">{timeAgo(h.ts)}</span>
+                  </div>
+                  <div class="truncate text-[10px] text-neutral-300">{h.url}</div>
+                </button>
+              </li>
+            {/each}
+          </ul>
+        {/if}
+      </div>
     {/if}
   </div>
 </aside>

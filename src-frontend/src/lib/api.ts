@@ -29,6 +29,22 @@ export interface ResponseDto {
   body: string;
   elapsed_ms: number;
   size_bytes: number;
+  history_id: number | null;
+}
+
+export interface HistoryEntry {
+  id: number;
+  ts: number;
+  method: string;
+  url: string;
+  status: number;
+  elapsed_ms: number;
+  size_bytes: number;
+}
+
+export interface HistoryReplay {
+  request: Compose;
+  response: ResponseDto;
 }
 
 export interface WorkspaceManifest {
@@ -74,4 +90,16 @@ export async function saveRequest(
   def: RequestDefinition,
 ): Promise<string> {
   return await invoke<string>("save_request", { collection, slug, def });
+}
+
+export async function listHistory(limit?: number): Promise<HistoryEntry[]> {
+  return await invoke<HistoryEntry[]>("list_history", { limit: limit ?? null });
+}
+
+export async function loadHistory(id: number): Promise<HistoryReplay> {
+  return await invoke<HistoryReplay>("load_history", { id });
+}
+
+export async function clearHistory(): Promise<number> {
+  return await invoke<number>("clear_history");
 }

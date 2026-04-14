@@ -5,13 +5,15 @@ use std::sync::Mutex;
 
 use serde::Serialize;
 use stubhouse_core::{
-    send, Compose, RequestDefinition, RequestEntry, Response, Workspace, WorkspaceManifest,
+    send, Compose, History, HistoryEntry, RequestDefinition, RequestEntry, Response, Workspace,
+    WorkspaceManifest,
 };
 use tauri::{Manager, State};
 
 #[derive(Default)]
 struct AppState {
     workspace: Mutex<Option<Workspace>>,
+    history: Mutex<Option<History>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -21,16 +23,18 @@ struct ResponseDto {
     body: String,
     elapsed_ms: u64,
     size_bytes: usize,
+    history_id: Option<i64>,
 }
 
-impl From<Response> for ResponseDto {
-    fn from(r: Response) -> Self {
+impl ResponseDto {
+    fn from_response(r: Response, history_id: Option<i64>) -> Self {
         Self {
             status: r.status,
             headers: r.headers,
             body: String::from_utf8_lossy(&r.body).into_owned(),
             elapsed_ms: r.elapsed_ms,
             size_bytes: r.size_bytes,
+            history_id,
         }
     }
 }
@@ -41,10 +45,26 @@ struct WorkspaceInfo {
     manifest: WorkspaceManifest,
 }
 
+#[derive(Debug, Serialize)]
+struct HistoryReplay {
+    request: Compose,
+    response: ResponseDto,
+}
+
 #[tauri::command]
-async fn send_request(req: Compose) -> Result<ResponseDto, String> {
-    let wire = req.build().map_err(|e| e.to_string())?;
-    send(wire).await.map(ResponseDto::from).map_err(|e| e.to_string())
+async fn send_request(
+    req: Compose,
+    state: State<'_, AppState>,
+) -> Result<ResponseDto, String> {
+    let wire = req.clone().build().map_err(|e| e.to_string())?;
+    let resp = send(wire).await.map_err(|e| e.to_string())?;
+
+    let history_id = {
+        let guard = state.history.lock().unwrap();
+        guard.as_ref().and_then(|h| h.record(&req, &resp).ok())
+    };
+
+    Ok(ResponseDto::from_response(resp, history_id))
 }
 
 #[tauri::command]
@@ -66,7 +86,10 @@ fn open_workspace(
     .map_err(|e| e.to_string())?;
 
     let info = WorkspaceInfo { root: ws.root().to_path_buf(), manifest: ws.manifest().clone() };
+    let history = History::open(ws.root()).map_err(|e| e.to_string())?;
+
     *state.workspace.lock().unwrap() = Some(ws);
+    *state.history.lock().unwrap() = Some(history);
     Ok(info)
 }
 
@@ -96,6 +119,32 @@ fn save_request(
     ws.save_request(&collection, &slug, &def).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn list_history(
+    limit: Option<usize>,
+    state: State<'_, AppState>,
+) -> Result<Vec<HistoryEntry>, String> {
+    let guard = state.history.lock().unwrap();
+    let h = guard.as_ref().ok_or_else(|| "no workspace open".to_string())?;
+    h.list(limit.unwrap_or(100)).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn load_history(id: i64, state: State<'_, AppState>) -> Result<HistoryReplay, String> {
+    let guard = state.history.lock().unwrap();
+    let h = guard.as_ref().ok_or_else(|| "no workspace open".to_string())?;
+    let record = h.get(id).map_err(|e| e.to_string())?;
+    let response = ResponseDto::from_response(record.response, Some(record.entry.id));
+    Ok(HistoryReplay { request: record.request, response })
+}
+
+#[tauri::command]
+fn clear_history(state: State<'_, AppState>) -> Result<usize, String> {
+    let guard = state.history.lock().unwrap();
+    let h = guard.as_ref().ok_or_else(|| "no workspace open".to_string())?;
+    h.clear().map_err(|e| e.to_string())
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -110,6 +159,9 @@ fn main() {
             list_requests,
             load_request,
             save_request,
+            list_history,
+            load_history,
+            clear_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

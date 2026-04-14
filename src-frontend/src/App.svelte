@@ -1,8 +1,9 @@
 <script lang="ts">
-  import type { Compose, RequestDefinition, ResponseDto } from "./lib/api";
+  import type { Compose, HistoryReplay, RequestDefinition, ResponseDto } from "./lib/api";
   import RequestPane from "./lib/RequestPane.svelte";
   import ResponsePanel from "./lib/ResponsePanel.svelte";
   import Sidebar from "./lib/Sidebar.svelte";
+  import { workspace } from "./lib/workspaceStore.svelte";
 
   function defaultReq(): Compose {
     return {
@@ -33,14 +34,30 @@
     response = null;
     error = null;
   }
+
+  function loadReplay(replay: HistoryReplay) {
+    req = replay.request;
+    name = "";
+    description = "";
+    activeId = null;
+    workspace.activeId = null;
+    response = replay.response;
+    error = null;
+  }
+
+  function onSendResult(r: ResponseDto) {
+    response = r;
+    error = null;
+    workspace.refreshHistory();
+  }
 </script>
 
 <main class="flex h-full">
-  <Sidebar onLoad={loadDef} />
+  <Sidebar onLoad={loadDef} onReplay={loadReplay} />
 
   <div class="flex flex-1 flex-col">
     <header class="border-b border-neutral-800 px-4 py-2 text-xs uppercase tracking-widest text-neutral-500">
-      StubHouse <span class="text-neutral-700">·</span> <span class="text-neutral-400">Phase 1 slice B</span>
+      StubHouse <span class="text-neutral-700">·</span> <span class="text-neutral-400">Phase 1 slice C</span>
     </header>
 
     <div class="flex flex-1 flex-col gap-4 overflow-auto p-4">
@@ -50,7 +67,7 @@
         bind:name
         bind:description
         {activeId}
-        onResult={(r) => { response = r; error = null; }}
+        onResult={onSendResult}
         onError={(e) => { error = e; response = null; }}
         onSaved={(id) => { activeId = id; }}
       />
