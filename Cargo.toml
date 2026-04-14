@@ -1,0 +1,32 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/stubhouse-core",
+    "crates/stubhouse-cli",
+    "crates/stubhouse-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/stubhouse/stubhouse"
+rust-version = "1.80"
+
+[workspace.dependencies]
+stubhouse-core = { path = "crates/stubhouse-core" }
+
+tokio = { version = "1.40", features = ["rt-multi-thread", "macros", "time"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2", "gzip", "brotli", "deflate", "stream"] }
+bytes = "1.7"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+
+[profile.dev]
+opt-level = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

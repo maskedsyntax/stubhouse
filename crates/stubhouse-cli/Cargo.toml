@@ -1,0 +1,14 @@
+[package]
+name = "stubhouse-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "stubhouse"
+path = "src/main.rs"
+
+[dependencies]
+stubhouse-core.workspace = true

@@ -1,0 +1,21 @@
+[package]
+name = "stubhouse-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "StubHouse core: HTTP request engine, mock runtime, config parser. No UI dependencies."
+
+[dependencies]
+tokio.workspace = true
+reqwest.workspace = true
+bytes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+base64 = "0.22"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
+wiremock = "0.6"
