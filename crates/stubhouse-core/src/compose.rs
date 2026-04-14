@@ -34,7 +34,7 @@ pub enum Body {
     Form { fields: Vec<(String, String)> },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Compose {
     pub method: Method,
     pub url: String,
