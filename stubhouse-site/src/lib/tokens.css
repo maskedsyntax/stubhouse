@@ -90,18 +90,19 @@ html.theme-light {
 
 @media (max-width: 639px) {
   :root {
-    --text-display-1: 56px;
-    --lh-display-1: 1.06;
+    --text-display-1: 46px;
+    --lh-display-1: 1.02;
     --track-display-1: -0.03em;
-    --text-display-2: 40px;
-    --lh-display-2: 1.08;
+    --text-display-2: 34px;
+    --lh-display-2: 1.06;
     --track-display-2: -0.025em;
-    --text-display-3: 28px;
-    --text-body-lg: 17px;
+    --text-display-3: 26px;
+    --text-body-lg: 16px;
     --text-body: 16px;
     --text-body-sm: 14px;
-    --text-mono: 13px;
+    --text-mono: 12px;
     --text-caption: 12px;
-    --text-eyebrow: 12px;
+    --text-eyebrow: 11px;
+    --nav-h: 58px;
   }
 }

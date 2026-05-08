@@ -253,6 +253,52 @@
     font-size: var(--text-body);
   }
 
+  @media (max-width: 639px) {
+    .nav__inner {
+      gap: 12px;
+      padding-inline: 14px;
+    }
+
+    .nav__brand {
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .nav__mark {
+      width: 26px;
+      height: 26px;
+      border-radius: 6px;
+    }
+
+    .nav__word {
+      font-size: 14px;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .nav__actions {
+      gap: 8px;
+    }
+
+    .nav__burger {
+      min-height: 36px;
+      padding: 0 10px;
+    }
+
+    .nav__drawer {
+      background: color-mix(in srgb, var(--bg-canvas) 96%, transparent);
+      backdrop-filter: blur(16px);
+      padding-block: 8px;
+    }
+
+    .nav__drawer-inner a {
+      padding: 14px 0;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+  }
+
   @media (min-width: 768px) {
     .nav__drawer {
       display: none;

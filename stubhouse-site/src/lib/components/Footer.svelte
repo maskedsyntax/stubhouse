@@ -75,6 +75,21 @@
     }
   }
 
+  @media (max-width: 639px) {
+    .footer {
+      padding-block: 44px 32px;
+    }
+
+    .footer__grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 28px 20px;
+    }
+
+    .footer__brand {
+      grid-column: 1 / -1;
+    }
+  }
+
   .footer__logo {
     display: inline-flex;
     color: var(--text-primary);
@@ -121,6 +136,12 @@
 
   .footer__rule {
     margin: 48px 0 24px;
+  }
+
+  @media (max-width: 639px) {
+    .footer__rule {
+      margin: 32px 0 20px;
+    }
   }
 
   .footer__bottom {

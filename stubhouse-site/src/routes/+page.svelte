@@ -412,7 +412,9 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
 
   @media (max-width: 639px) {
     .hero {
-      min-height: 72vh;
+      min-height: auto;
+      padding-top: 34px;
+      padding-bottom: 44px;
     }
   }
 
@@ -494,6 +496,64 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     text-align: center;
   }
 
+  @media (max-width: 639px) {
+    .hero__inner {
+      align-items: stretch;
+      text-align: left;
+    }
+
+    .hero__mark img {
+      width: 64px;
+      height: 64px;
+      margin-inline: 0;
+      border-radius: 14px;
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.28),
+        0 0 0 1px var(--border-subtle);
+    }
+
+    .hero__title {
+      max-width: 9ch;
+      margin-top: 14px;
+    }
+
+    .hero__sub {
+      margin-top: 16px;
+      max-width: 31ch;
+    }
+
+    .hero__cta {
+      margin-top: 24px;
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      justify-content: stretch;
+    }
+
+    .hero__platforms {
+      margin-top: 12px;
+    }
+
+    .hero__proof {
+      margin-top: 20px;
+      justify-content: flex-start;
+      gap: 8px;
+    }
+
+    .hero__proof span {
+      padding: 6px 9px;
+      font-size: 12px;
+    }
+
+    .hero__demo {
+      margin-top: 30px;
+    }
+
+    .hero__demo-note {
+      text-align: left;
+    }
+  }
+
   @media (prefers-reduced-motion: no-preference) {
     .hero-ent {
       opacity: 0;
@@ -533,6 +593,12 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
   .dual {
     display: grid;
     gap: 16px;
+  }
+
+  @media (max-width: 639px) {
+    .dual {
+      gap: 12px;
+    }
   }
 
   .dual__panel {
@@ -587,6 +653,16 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     gap: clamp(56px, 10vw, 96px);
   }
 
+  @media (max-width: 639px) {
+    .mock-head {
+      margin-bottom: 32px;
+    }
+
+    .mock-rows {
+      gap: 48px;
+    }
+  }
+
   .mock-row {
     display: grid;
     gap: clamp(24px, 5vw, 48px);
@@ -617,10 +693,29 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     white-space: pre-wrap;
   }
 
+  @media (max-width: 639px) {
+    .curl-block {
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 11px;
+    }
+  }
+
   .fault-grid {
     margin-top: 40px;
     display: grid;
     gap: 12px;
+  }
+
+  @media (max-width: 639px) {
+    .fault-grid {
+      margin-top: 28px;
+    }
+
+    .fault-card__yaml {
+      opacity: 1;
+      max-height: none;
+    }
   }
 
   @media (min-width: 768px) {
@@ -711,6 +806,18 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     margin-bottom: 12px;
   }
 
+  @media (max-width: 639px) {
+    .chart__row {
+      grid-template-columns: 86px 1fr 58px;
+      gap: 8px;
+    }
+
+    .chart__lab,
+    .chart__num {
+      font-size: 11px;
+    }
+  }
+
   .chart__track {
     position: relative;
     height: 10px;
@@ -790,6 +897,27 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
+  }
+
+  @media (max-width: 639px) {
+    .final-cta {
+      padding-block: 40px;
+    }
+
+    .final-cta__inner {
+      gap: 22px;
+    }
+
+    .final-cta__title {
+      font-size: 22px;
+      line-height: 1.22;
+    }
+
+    .final-cta__actions {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
   }
 
   @media (min-width: 900px) {

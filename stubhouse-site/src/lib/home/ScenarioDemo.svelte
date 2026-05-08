@@ -109,4 +109,33 @@
     border-radius: var(--radius-sm);
     background: var(--bg-canvas);
   }
+
+  @media (max-width: 639px) {
+    .scenario-demo {
+      border-radius: var(--radius-sm);
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2);
+    }
+
+    .scenario-demo__ctrl {
+      gap: 6px;
+      padding: 10px;
+    }
+
+    .scenario-demo__btn {
+      flex: 1 1 auto;
+      min-width: 0;
+      padding: 7px 8px;
+      font-size: 11px;
+    }
+
+    .scenario-demo__out {
+      padding: 10px;
+    }
+
+    .scenario-demo__pre {
+      overflow-x: auto;
+      white-space: pre;
+      font-size: 11px;
+    }
+  }
 </style>

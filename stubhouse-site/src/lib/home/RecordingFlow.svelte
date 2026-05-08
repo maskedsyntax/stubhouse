@@ -92,6 +92,32 @@
     display: block;
   }
 
+  @media (max-width: 639px) {
+    .rec {
+      border-radius: var(--radius-sm);
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2);
+    }
+
+    .rec__toolbar {
+      padding: 9px 10px;
+    }
+
+    .rec__toggle {
+      padding: 6px 8px;
+      font-size: 11px;
+    }
+
+    .rec__svg {
+      width: 130%;
+      margin-left: -15%;
+      max-width: none;
+    }
+
+    .rec__note {
+      padding: 10px;
+    }
+  }
+
   .rec__note {
     margin: 0;
     padding: 12px;

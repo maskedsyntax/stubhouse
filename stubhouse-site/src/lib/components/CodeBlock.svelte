@@ -205,6 +205,34 @@
     background: var(--bg-surface);
   }
 
+  @media (max-width: 639px) {
+    .code-block {
+      border-radius: var(--radius-sm);
+      box-shadow: 0 14px 36px rgba(0, 0, 0, 0.2);
+    }
+
+    .code-block__head {
+      gap: 8px;
+      padding: 9px 10px;
+    }
+
+    .code-block__file {
+      font-size: 11px;
+    }
+
+    .code-block__lang,
+    .code-block__copy {
+      font-size: 11px;
+    }
+
+    .code-block__pre {
+      padding: 12px;
+      font-size: 11px;
+      line-height: 1.55;
+      max-height: 360px;
+    }
+  }
+
   :global(html.theme-dark) .code-block {
     --syntax-text: #d6d3cb;
     --syntax-key: #f4eee0;

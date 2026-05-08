@@ -92,4 +92,32 @@
   .demo-body {
     background: var(--bg-canvas);
   }
+
+  @media (max-width: 639px) {
+    .demo-frame {
+      border-radius: var(--radius-sm);
+      box-shadow:
+        0 0 0 1px var(--border-subtle),
+        0 16px 42px rgba(0, 0, 0, 0.22);
+    }
+
+    .demo-chrome {
+      padding: 0.5rem 0.6rem;
+    }
+
+    .demo-lights {
+      display: none;
+    }
+
+    .demo-title {
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .demo-spacer {
+      display: none;
+    }
+  }
 </style>

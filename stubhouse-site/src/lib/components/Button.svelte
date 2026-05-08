@@ -141,4 +141,19 @@
     height: 16px;
     flex-shrink: 0;
   }
+
+  @media (max-width: 639px) {
+    .ui-btn {
+      width: 100%;
+      min-width: 0;
+      white-space: normal;
+      text-align: center;
+    }
+
+    .ui-btn--lg {
+      min-height: 46px;
+      padding-inline: 16px;
+      font-size: var(--text-body-sm);
+    }
+  }
 </style>

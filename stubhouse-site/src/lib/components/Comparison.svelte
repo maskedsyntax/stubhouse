@@ -105,4 +105,27 @@
     margin-top: 16px;
     max-width: 65ch;
   }
+
+  @media (max-width: 639px) {
+    .comparison-scroll {
+      border-radius: var(--radius-sm);
+      margin-inline: -16px;
+      border-left: 0;
+      border-right: 0;
+    }
+
+    .comparison {
+      min-width: 600px;
+      font-size: 12px;
+    }
+
+    .comparison th,
+    .comparison td {
+      padding: 10px 12px;
+    }
+
+    .comparison__note {
+      margin-top: 12px;
+    }
+  }
 </style>
