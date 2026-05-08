@@ -53,6 +53,7 @@
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     overflow: hidden;
+    min-width: 0;
     background: var(--bg-surface);
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
   }
@@ -134,7 +135,9 @@
 
     .scenario-demo__pre {
       overflow-x: auto;
-      white-space: pre;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       font-size: 11px;
     }
   }

@@ -146,7 +146,9 @@
   .code-block {
     border: 1px solid var(--border-subtle);
     background: var(--bg-surface);
+    width: 100%;
     max-width: 100%;
+    min-width: 0;
     border-radius: var(--radius-md);
     overflow: hidden;
     box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18);
@@ -198,6 +200,7 @@
   .code-block__pre {
     margin: 0;
     padding: 16px;
+    max-width: 100%;
     overflow-x: auto;
     font-size: var(--text-mono);
     line-height: 1.55;
@@ -230,6 +233,9 @@
       font-size: 11px;
       line-height: 1.55;
       max-height: 360px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
     }
   }
 

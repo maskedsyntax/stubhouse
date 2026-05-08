@@ -122,6 +122,7 @@
     color: var(--text-primary);
     font-weight: 500;
     letter-spacing: -0.02em;
+    min-width: 0;
   }
 
   .nav__mark {
@@ -261,6 +262,7 @@
 
     .nav__brand {
       gap: 8px;
+      flex: 1 1 auto;
       min-width: 0;
     }
 
@@ -280,6 +282,7 @@
 
     .nav__actions {
       gap: 2px;
+      flex: 0 0 auto;
     }
 
     .nav__burger {

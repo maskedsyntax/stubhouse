@@ -40,6 +40,25 @@
       </tbody>
     </table>
   </div>
+  <div class="comparison-mobile" aria-label="Product comparison">
+    {#each comparison.rows as row}
+      <article class="comparison-card">
+        <h3>{row.feature}</h3>
+        <div class="comparison-card__grid">
+          <span>StubHouse</span>
+          <strong>{cellText(row.stubhouse as Cell)}</strong>
+          <span>Postman</span>
+          <strong>{cellText(row.postman as Cell)}</strong>
+          <span>Insomnia</span>
+          <strong>{cellText(row.insomnia as Cell)}</strong>
+          <span>Bruno</span>
+          <strong>{cellText(row.bruno as Cell)}</strong>
+          <span>Yaak</span>
+          <strong>{cellText(row.yaak as Cell)}</strong>
+        </div>
+      </article>
+    {/each}
+  </div>
   <p class="caption comparison__note">
     Sourced from public information as of {comparison.updated}. Updated when competitors ship. Corrections welcome — open a PR.
   </p>
@@ -48,6 +67,7 @@
 <style>
   .comparison-wrap {
     width: 100%;
+    min-width: 0;
   }
 
   .comparison-scroll {
@@ -106,22 +126,67 @@
     max-width: 65ch;
   }
 
+  .comparison-mobile {
+    display: none;
+  }
+
   @media (max-width: 639px) {
     .comparison-scroll {
-      border-radius: var(--radius-sm);
-      margin-inline: -16px;
-      border-left: 0;
-      border-right: 0;
+      display: none;
     }
 
-    .comparison {
-      min-width: 600px;
+    .comparison-mobile {
+      display: grid;
+      gap: 8px;
+    }
+
+    .comparison-card {
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      background: var(--bg-surface);
+      overflow: hidden;
+    }
+
+    .comparison-card h3 {
+      margin: 0;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--text-primary);
+      background: var(--bg-surface-2);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 500;
+    }
+
+    .comparison-card__grid {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 0;
       font-size: 12px;
     }
 
-    .comparison th,
-    .comparison td {
-      padding: 10px 12px;
+    .comparison-card__grid span,
+    .comparison-card__grid strong {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .comparison-card__grid span {
+      color: var(--text-secondary);
+    }
+
+    .comparison-card__grid strong {
+      min-width: 64px;
+      text-align: right;
+      color: var(--text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      font-weight: 400;
+    }
+
+    .comparison-card__grid span:nth-last-child(-n + 2),
+    .comparison-card__grid strong:nth-last-child(-n + 2) {
+      border-bottom: 0;
     }
 
     .comparison__note {

@@ -682,6 +682,10 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     padding-block: clamp(8px, 2vw, 20px);
   }
 
+  .mock-row > * {
+    min-width: 0;
+  }
+
   @media (min-width: 1024px) {
     .mock-row {
       grid-template-columns: 1fr 1fr;
@@ -697,6 +701,7 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
   .curl-block {
     margin: 12px 0 0;
     padding: 12px;
+    max-width: 100%;
     border: 1px solid var(--border-subtle);
     background: var(--bg-surface);
     border-radius: var(--radius-md);
@@ -708,7 +713,9 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
   @media (max-width: 639px) {
     .curl-block {
       overflow-x: auto;
-      white-space: pre;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      word-break: break-word;
       font-size: 11px;
     }
   }
