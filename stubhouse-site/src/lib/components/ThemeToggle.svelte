@@ -97,4 +97,16 @@
   .theme-toggle:focus-visible {
     color: var(--text-primary);
   }
+
+  @media (max-width: 639px) {
+    .theme-toggle {
+      width: 34px;
+      height: 34px;
+    }
+
+    .theme-toggle svg {
+      width: 16px;
+      height: 16px;
+    }
+  }
 </style>

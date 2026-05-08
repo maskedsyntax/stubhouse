@@ -13,6 +13,7 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: clip;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -32,6 +33,7 @@ body {
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
+  overflow-x: clip;
 }
 
 body::before {
@@ -133,7 +135,7 @@ body::before {
 .display-1 {
   font-size: var(--text-display-1);
   line-height: var(--lh-display-1);
-  letter-spacing: -0.045em;
+  letter-spacing: var(--track-display-1);
   font-weight: 400;
   margin: 0;
   font-family: var(--font-display);
@@ -143,7 +145,7 @@ body::before {
 .display-2 {
   font-size: var(--text-display-2);
   line-height: var(--lh-display-2);
-  letter-spacing: -0.042em;
+  letter-spacing: var(--track-display-2);
   font-weight: 400;
   margin: 0;
   font-family: var(--font-display);
@@ -173,18 +175,18 @@ body::before {
 
 @media (max-width: 639px) {
   .section {
-    padding-block: 56px;
+    padding-block: 48px;
   }
 
   .display-1,
   .display-2,
   .display-3 {
     max-width: 100%;
-    overflow-wrap: anywhere;
+    overflow-wrap: normal;
   }
 
   .body-lg {
-    line-height: 1.55;
+    line-height: 1.5;
   }
 }
 
@@ -259,6 +261,17 @@ body::before {
   display: grid;
   gap: clamp(40px, 7vw, 88px);
   align-items: center;
+}
+
+.grid-2 > * {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .grid-2 {
+    gap: 26px;
+    align-items: start;
+  }
 }
 
 @media (min-width: 1024px) {

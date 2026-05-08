@@ -90,12 +90,12 @@ html.theme-light {
 
 @media (max-width: 639px) {
   :root {
-    --text-display-1: 46px;
-    --lh-display-1: 1.02;
-    --track-display-1: -0.03em;
-    --text-display-2: 34px;
-    --lh-display-2: 1.06;
-    --track-display-2: -0.025em;
+    --text-display-1: 42px;
+    --lh-display-1: 1.04;
+    --track-display-1: -0.02em;
+    --text-display-2: 32px;
+    --lh-display-2: 1.08;
+    --track-display-2: -0.018em;
     --text-display-3: 26px;
     --text-body-lg: 16px;
     --text-body: 16px;

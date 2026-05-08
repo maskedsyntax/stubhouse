@@ -65,6 +65,8 @@
   @media (max-width: 639px) {
     .hero-ui {
       min-height: auto;
+      width: 100%;
+      min-width: 0;
     }
   }
 
@@ -156,6 +158,7 @@
   .hero-ui__main {
     display: flex;
     flex-direction: column;
+    min-width: 0;
   }
 
   .hero-ui__bar {
@@ -171,7 +174,7 @@
   @media (max-width: 639px) {
     .hero-ui__bar {
       flex-wrap: nowrap;
-      padding: 10px;
+      padding: 9px 10px;
       gap: 6px;
       font-size: 11px;
     }
@@ -208,7 +211,8 @@
 
   @media (max-width: 639px) {
     .hero-ui__body {
-      padding: 12px;
+      padding: 10px;
+      gap: 7px;
     }
   }
 
@@ -228,9 +232,9 @@
 
   @media (max-width: 639px) {
     .hero-ui__resp {
-      min-height: 156px;
-      max-height: 220px;
-      padding: 12px;
+      min-height: 120px;
+      max-height: 170px;
+      padding: 10px;
       font-size: 11px;
       line-height: 1.55;
     }

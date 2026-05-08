@@ -413,8 +413,8 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
   @media (max-width: 639px) {
     .hero {
       min-height: auto;
-      padding-top: 34px;
-      padding-bottom: 44px;
+      padding-top: 28px;
+      padding-bottom: 36px;
     }
   }
 
@@ -500,6 +500,11 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     .hero__inner {
       align-items: stretch;
       text-align: left;
+      max-width: 460px;
+    }
+
+    .hero__mark {
+      display: none;
     }
 
     .hero__mark img {
@@ -512,21 +517,26 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
         0 0 0 1px var(--border-subtle);
     }
 
+    .hero .eyebrow {
+      margin-bottom: 10px;
+    }
+
     .hero__title {
-      max-width: 9ch;
-      margin-top: 14px;
+      max-width: none;
+      margin-top: 0;
+      text-wrap: balance;
     }
 
     .hero__sub {
-      margin-top: 16px;
-      max-width: 31ch;
+      margin-top: 14px;
+      max-width: 36ch;
     }
 
     .hero__cta {
-      margin-top: 24px;
+      margin-top: 22px;
       display: grid;
       grid-template-columns: 1fr;
-      gap: 10px;
+      gap: 8px;
       justify-content: stretch;
     }
 
@@ -535,21 +545,23 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     }
 
     .hero__proof {
-      margin-top: 20px;
+      margin-top: 18px;
       justify-content: flex-start;
-      gap: 8px;
+      gap: 7px;
     }
 
     .hero__proof span {
-      padding: 6px 9px;
-      font-size: 12px;
+      padding: 5px 8px;
+      font-size: 11px;
     }
 
     .hero__demo {
-      margin-top: 30px;
+      margin-top: 26px;
+      min-width: 0;
     }
 
     .hero__demo-note {
+      margin-top: 10px;
       text-align: left;
     }
   }

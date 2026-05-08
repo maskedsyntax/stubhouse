@@ -255,8 +255,8 @@
 
   @media (max-width: 639px) {
     .nav__inner {
-      gap: 12px;
-      padding-inline: 14px;
+      gap: 10px;
+      padding-inline: 16px;
     }
 
     .nav__brand {
@@ -265,8 +265,8 @@
     }
 
     .nav__mark {
-      width: 26px;
-      height: 26px;
+      width: 24px;
+      height: 24px;
       border-radius: 6px;
     }
 
@@ -279,12 +279,17 @@
     }
 
     .nav__actions {
-      gap: 8px;
+      gap: 2px;
     }
 
     .nav__burger {
-      min-height: 36px;
-      padding: 0 10px;
+      min-height: 34px;
+      padding: 0 9px;
+      border-radius: 7px;
+      font-family: var(--font-sans);
+      font-size: 11px;
+      letter-spacing: 0;
+      font-variant-caps: normal;
     }
 
     .nav__drawer {

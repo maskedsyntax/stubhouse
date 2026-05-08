@@ -36,6 +36,7 @@
     border-radius: var(--radius-md);
     border: 1px solid var(--border-default);
     overflow: hidden;
+    min-width: 0;
     background: var(--bg-surface-2);
     box-shadow:
       0 0 0 1px var(--border-subtle),
@@ -96,6 +97,7 @@
   @media (max-width: 639px) {
     .demo-frame {
       border-radius: var(--radius-sm);
+      width: 100%;
       box-shadow:
         0 0 0 1px var(--border-subtle),
         0 16px 42px rgba(0, 0, 0, 0.22);
