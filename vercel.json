@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd stubhouse-site && npm run build",
+  "installCommand": "cd stubhouse-site && npm install",
+  "outputDirectory": "stubhouse-site/build"
+}
