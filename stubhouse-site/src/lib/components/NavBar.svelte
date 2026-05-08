@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Menu from 'lucide-svelte/icons/menu';
   import { onMount } from 'svelte';
   import Button from './Button.svelte';
   import ThemeToggle from './ThemeToggle.svelte';
@@ -57,12 +58,13 @@
       <Button href="/download" variant="primary" size="md" class="nav__dl">Download</Button>
       <button
         type="button"
-        class="nav__burger mono"
+        class="nav__burger"
         aria-expanded={open}
         aria-controls="site-menu"
+        aria-label={open ? 'Close menu' : 'Open menu'}
         onclick={() => (open = !open)}
       >
-        Menu
+        <Menu size={18} strokeWidth={1.75} aria-hidden="true" />
       </button>
     </div>
   </div>
@@ -200,16 +202,17 @@
 
   .nav__burger {
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
     border: 0;
     background: var(--bg-surface);
     border: 1px solid var(--border-default);
     border-radius: var(--radius-sm);
     color: var(--text-secondary);
-    padding: 8px 10px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
     cursor: pointer;
-    font-size: 12px;
-    letter-spacing: 0.06em;
-    font-variant-caps: all-small-caps;
   }
 
   @media (min-width: 768px) {
@@ -286,13 +289,11 @@
     }
 
     .nav__burger {
-      min-height: 34px;
-      padding: 0 9px;
+      width: 36px;
+      height: 36px;
+      min-height: 36px;
+      padding: 0;
       border-radius: 7px;
-      font-family: var(--font-sans);
-      font-size: 11px;
-      letter-spacing: 0;
-      font-variant-caps: normal;
     }
 
     .nav__drawer {

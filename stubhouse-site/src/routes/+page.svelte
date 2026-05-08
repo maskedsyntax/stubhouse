@@ -1,4 +1,6 @@
 <script lang="ts">
+  import ArrowRight from 'lucide-svelte/icons/arrow-right';
+  import Download from 'lucide-svelte/icons/download';
   import Button from '$lib/components/Button.svelte';
   import CodeBlock from '$lib/components/CodeBlock.svelte';
   import Comparison from '$lib/components/Comparison.svelte';
@@ -113,9 +115,7 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     <div class="hero__cta hero-ent hero-ent--4">
       <Button href="/download" variant="primary" size="lg" class="hero__cta-btn">
         {#snippet lead()}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M12 4v12m0 0 4-4m-4 4-4-4M4 20h16" />
-          </svg>
+          <Download size={16} strokeWidth={1.75} aria-hidden="true" />
         {/snippet}
         Download for macOS
       </Button>
@@ -128,7 +128,7 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
       >
         View on GitHub
         {#snippet trailing()}
-          <span aria-hidden="true">→</span>
+          <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
         {/snippet}
       </Button>
     </div>
@@ -375,15 +375,13 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     <div class="final-cta__actions">
       <Button href="/download" variant="primary" size="lg">
         {#snippet lead()}
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
-            <path d="M12 4v12m0 0 4-4m-4 4-4-4M4 20h16" />
-          </svg>
+          <Download size={16} strokeWidth={1.75} aria-hidden="true" />
         {/snippet}
         Download for macOS
       </Button>
       <Button href="https://github.com/stubhouse/stubhouse" variant="secondary" size="lg" target="_blank" rel="noopener noreferrer">
         View on GitHub
-        {#snippet trailing()}<span aria-hidden="true">→</span>{/snippet}
+        {#snippet trailing()}<ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />{/snippet}
       </Button>
     </div>
   </div>
