@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en" class="theme-dark">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%sveltekit.assets%/favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="%sveltekit.assets%/apple-touch-icon.png" />
+    <link rel="icon" href="%sveltekit.assets%/icon-192.png" sizes="192x192" type="image/png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script>
+      (function () {
+        var params = new URLSearchParams(window.location.search);
+        var urlTheme = params.get('theme');
+        var storedRaw = localStorage.getItem('stubhouse-theme');
+        var stored = storedRaw === 'dark' || storedRaw === 'light' || storedRaw === 'system' ? storedRaw : 'system';
+        var resolved;
+        if (urlTheme === 'dark' || urlTheme === 'light') {
+          resolved = urlTheme;
+        } else if (stored === 'system') {
+          resolved = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        } else {
+          resolved = stored;
+        }
+        document.documentElement.className = 'theme-' + resolved;
+        document.documentElement.setAttribute('data-theme-pref', stored);
+      })();
+    </script>
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>

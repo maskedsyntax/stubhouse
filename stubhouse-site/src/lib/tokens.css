@@ -1,0 +1,107 @@
+/* Design tokens — StubHouse marketing spec §2.2 */
+
+html.theme-dark {
+  --bg-canvas: #0a0a0a;
+  --bg-surface: #141414;
+  --bg-surface-2: #1c1c1c;
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --text-primary: #f5f5f2;
+  --text-secondary: #a3a3a0;
+  --text-tertiary: #6e6e6b;
+  --text-disabled: #3f3f3d;
+  --code-comment: #6e6e6b;
+  --code-keyword: #f5f5f2;
+  --code-string: #c4c4c0;
+  --code-punct: #6e6e6b;
+  --shimmer: rgba(255, 255, 255, 0.04);
+  color-scheme: dark;
+}
+
+html.theme-light {
+  --bg-canvas: #fafaf7;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f2f2ee;
+  --border-subtle: rgba(10, 10, 10, 0.06);
+  --border-default: rgba(10, 10, 10, 0.1);
+  --border-strong: rgba(10, 10, 10, 0.18);
+  --text-primary: #0a0a0a;
+  --text-secondary: #525250;
+  --text-tertiary: #82827f;
+  --text-disabled: #babab7;
+  --code-comment: #82827f;
+  --code-keyword: #0a0a0a;
+  --code-string: #3f3f3d;
+  --code-punct: #82827f;
+  --shimmer: rgba(10, 10, 10, 0.03);
+  color-scheme: light;
+}
+
+:root {
+  --font-display: 'Newsreader', 'Geist Sans', Georgia, serif;
+  --font-sans: 'Geist Sans', 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', 'JetBrains Mono', monospace;
+  --font-serif: 'Newsreader', Georgia, 'Times New Roman', serif;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --max-page: 1280px;
+  --max-hero: 1180px;
+  --nav-h: 64px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --shadow-soft: 0 24px 80px rgba(0, 0, 0, 0.28);
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --text-display-1: 88px;
+    --lh-display-1: 1.02;
+    --track-display-1: -0.04em;
+    --text-display-2: 64px;
+    --lh-display-2: 1.04;
+    --track-display-2: -0.035em;
+    --text-display-3: 44px;
+    --text-body-lg: 19px;
+    --text-body: 16px;
+    --text-body-sm: 14px;
+    --text-mono: 14px;
+    --text-caption: 12px;
+    --text-eyebrow: 13px;
+  }
+}
+
+@media (max-width: 1023px) and (min-width: 640px) {
+  :root {
+    --text-display-1: 64px;
+    --lh-display-1: 1.04;
+    --track-display-1: -0.035em;
+    --text-display-2: 48px;
+    --lh-display-2: 1.06;
+    --track-display-2: -0.03em;
+    --text-display-3: 36px;
+    --text-body-lg: 18px;
+    --text-body: 16px;
+    --text-body-sm: 14px;
+    --text-mono: 14px;
+    --text-caption: 12px;
+    --text-eyebrow: 13px;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --text-display-1: 56px;
+    --lh-display-1: 1.06;
+    --track-display-1: -0.03em;
+    --text-display-2: 40px;
+    --lh-display-2: 1.08;
+    --track-display-2: -0.025em;
+    --text-display-3: 28px;
+    --text-body-lg: 17px;
+    --text-body: 16px;
+    --text-body-sm: 14px;
+    --text-mono: 13px;
+    --text-caption: 12px;
+    --text-eyebrow: 12px;
+  }
+}

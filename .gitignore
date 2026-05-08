@@ -23,6 +23,7 @@ target
 # Frontend (bun / vite)
 node_modules/
 src-frontend/dist/
+stubhouse-site/build/
 .DS_Store
 
 # Tauri auto-generated

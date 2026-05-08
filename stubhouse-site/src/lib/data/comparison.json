@@ -1,0 +1,122 @@
+{
+  "updated": "2026-05-08",
+  "rows": [
+    {
+      "feature": "Local-first (no account)",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": true,
+      "bruno": true,
+      "yaak": true,
+      "note": ""
+    },
+    {
+      "feature": "Files as source of truth",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": false,
+      "bruno": true,
+      "yaak": true,
+      "note": ""
+    },
+    {
+      "feature": "Embedded mock server",
+      "stubhouse": true,
+      "postman": "partial",
+      "insomnia": false,
+      "bruno": false,
+      "yaak": false,
+      "note": "Postman: paid add-on."
+    },
+    {
+      "feature": "Stateful mocks",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": false,
+      "bruno": false,
+      "yaak": false,
+      "note": ""
+    },
+    {
+      "feature": "Scenario switching",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": false,
+      "bruno": false,
+      "yaak": false,
+      "note": ""
+    },
+    {
+      "feature": "Recording mode",
+      "stubhouse": true,
+      "postman": "partial",
+      "insomnia": false,
+      "bruno": false,
+      "yaak": false,
+      "note": "Postman: paid."
+    },
+    {
+      "feature": "Fault injection",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": false,
+      "bruno": false,
+      "yaak": false,
+      "note": ""
+    },
+    {
+      "feature": "Mock control API",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": false,
+      "bruno": false,
+      "yaak": false,
+      "note": ""
+    },
+    {
+      "feature": "CI / headless mode",
+      "stubhouse": true,
+      "postman": true,
+      "insomnia": false,
+      "bruno": true,
+      "yaak": false,
+      "note": "Postman: Newman."
+    },
+    {
+      "feature": "OpenAPI schema validation",
+      "stubhouse": true,
+      "postman": true,
+      "insomnia": true,
+      "bruno": false,
+      "yaak": true,
+      "note": ""
+    },
+    {
+      "feature": "Native binary (no Electron)",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": false,
+      "bruno": true,
+      "yaak": true,
+      "note": "StubHouse: Tauri."
+    },
+    {
+      "feature": "Scripting language",
+      "stubhouse": "Rhai",
+      "postman": "JS (V8)",
+      "insomnia": "JS (V8)",
+      "bruno": "JS (V8)",
+      "yaak": "—",
+      "note": ""
+    },
+    {
+      "feature": "Free and open source",
+      "stubhouse": true,
+      "postman": false,
+      "insomnia": true,
+      "bruno": true,
+      "yaak": true,
+      "note": ""
+    }
+  ]
+}
