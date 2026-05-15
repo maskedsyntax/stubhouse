@@ -130,6 +130,57 @@ export async function getActiveEnv(): Promise<ActiveEnvironment | null> {
   return await invoke<ActiveEnvironment | null>("active_env");
 }
 
+export interface ScenarioEntry {
+  name: string;
+  rules: number;
+  active_rules: number;
+}
+
+export interface ScenarioActivation {
+  scenario: string;
+  files_changed: number;
+  rules_changed: number;
+}
+
+export async function listMockScenarios(): Promise<ScenarioEntry[]> {
+  return await invoke<ScenarioEntry[]>("list_mock_scenarios");
+}
+
+export async function activateMockScenario(name: string): Promise<ScenarioActivation> {
+  return await invoke<ScenarioActivation>("activate_mock_scenario", { name });
+}
+
+export interface MockLog {
+  method: string;
+  path: string;
+  matched_rule: string | null;
+  status: number;
+}
+
+export interface MockServerStatus {
+  running: boolean;
+  bind: string;
+  port: number;
+  url: string;
+  rules: number;
+  logs: MockLog[];
+}
+
+export async function startMockServer(bind?: string, port?: number): Promise<MockServerStatus> {
+  return await invoke<MockServerStatus>("start_mock_server", {
+    bind: bind ?? null,
+    port: port ?? null,
+  });
+}
+
+export async function stopMockServer(): Promise<MockServerStatus> {
+  return await invoke<MockServerStatus>("stop_mock_server");
+}
+
+export async function mockServerStatus(): Promise<MockServerStatus> {
+  return await invoke<MockServerStatus>("mock_server_status");
+}
+
 export async function exportCurl(req: Compose): Promise<string> {
   return await invoke<string>("export_curl", { req });
 }

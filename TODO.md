@@ -35,10 +35,10 @@ Top of list is "do next". Mark with `[x]` when done.
 - [x] Mock rule YAML schema (`collections/*/mocks/*.yaml`) + parser
 - [x] Priority trie route matcher (exact > `:param` > `*` > `**` > catch-all)
 - [x] Scenario model (named response states, `active: true`)
-- [ ] Scenario switcher — UI dropdown + CLI command
+- [x] Scenario switcher — UI dropdown + CLI command
   - [x] CLI: `stubhouse scenario list` / `stubhouse scenario activate <name>`
-  - [ ] UI dropdown
-- [ ] Mock server panel in UI: on/off toggle, port picker, live request log
+  - [x] UI dropdown
+- [x] Mock server panel in UI: on/off toggle, port picker, live request log
 - [ ] Hot reload: watch `.stubhouse/collections/**/mocks/*.yaml` for changes
 - [ ] Control API at `/__mirage/*` (status, scenario, reset, rules, log)
 - [ ] Fault injection: `timeout`, `slow_response`, `connection_reset`, `partial_body`, `random_5xx`

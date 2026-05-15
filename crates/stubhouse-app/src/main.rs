@@ -1,13 +1,18 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use stubhouse_core::{
-    from_postman_v21, interpolate_compose, list_environments, load_environment, save_environment,
-    send, to_curl, Compose, Environment, EnvironmentEntry, EnvironmentFile, History, HistoryEntry,
-    RequestDefinition, RequestEntry, Response, Workspace, WorkspaceManifest,
+    from_postman_v21, interpolate_compose, list_environments, load_environment,
+    mock::{
+        activate_scenario, list_scenarios, load_rules,
+        server::{run as run_mock_server, MockLog},
+        ScenarioActivation, ScenarioEntry,
+    },
+    save_environment, send, to_curl, Compose, Environment, EnvironmentEntry, EnvironmentFile,
+    History, HistoryEntry, RequestDefinition, RequestEntry, Response, Workspace, WorkspaceManifest,
 };
 use tauri::{Manager, State};
 
@@ -16,6 +21,15 @@ struct AppState {
     workspace: Mutex<Option<Workspace>>,
     history: Mutex<Option<History>>,
     active_env: Mutex<Option<Environment>>,
+    mock_server: Mutex<Option<MockServerRuntime>>,
+}
+
+struct MockServerRuntime {
+    bind: String,
+    port: u16,
+    rules: usize,
+    logs: Arc<Mutex<Vec<MockLog>>>,
+    shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -51,6 +65,29 @@ struct WorkspaceInfo {
 struct HistoryReplay {
     request: Compose,
     response: ResponseDto,
+}
+
+#[derive(Debug, Serialize)]
+struct MockServerStatus {
+    running: bool,
+    bind: String,
+    port: u16,
+    url: String,
+    rules: usize,
+    logs: Vec<MockLog>,
+}
+
+impl MockServerStatus {
+    fn stopped() -> Self {
+        Self {
+            running: false,
+            bind: "127.0.0.1".into(),
+            port: 4000,
+            url: "http://127.0.0.1:4000".into(),
+            rules: 0,
+            logs: vec![],
+        }
+    }
 }
 
 #[tauri::command]
@@ -98,6 +135,7 @@ fn open_workspace(path: String, state: State<'_, AppState>) -> Result<WorkspaceI
     *state.workspace.lock().unwrap() = Some(ws);
     *state.history.lock().unwrap() = Some(history);
     *state.active_env.lock().unwrap() = None;
+    stop_mock_runtime(&state);
     Ok(info)
 }
 
@@ -152,6 +190,111 @@ fn active_env(state: State<'_, AppState>) -> Result<Option<ActiveEnvironment>, S
 fn save_env(env: EnvironmentFile, state: State<'_, AppState>) -> Result<(), String> {
     let root = workspace_root(&state)?;
     save_environment(&root, &env).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn list_mock_scenarios(state: State<'_, AppState>) -> Result<Vec<ScenarioEntry>, String> {
+    let root = workspace_root(&state)?;
+    list_scenarios(&root).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn activate_mock_scenario(
+    name: String,
+    state: State<'_, AppState>,
+) -> Result<ScenarioActivation, String> {
+    let root = workspace_root(&state)?;
+    activate_scenario(&root, &name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn start_mock_server(
+    bind: Option<String>,
+    port: Option<u16>,
+    state: State<'_, AppState>,
+) -> Result<MockServerStatus, String> {
+    let root = workspace_root(&state)?;
+    let bind = bind.unwrap_or_else(|| "127.0.0.1".to_string());
+    let port = port.unwrap_or(4000);
+    let addr: std::net::SocketAddr = format!("{bind}:{port}")
+        .parse()
+        .map_err(|e: std::net::AddrParseError| e.to_string())?;
+    let rules = load_rules(&root).map_err(|e| e.to_string())?;
+
+    // Fail fast for the common port-conflict case. The spawned server will bind
+    // again immediately after this check.
+    let probe = tokio::net::TcpListener::bind(addr)
+        .await
+        .map_err(|e| format!("bind {addr}: {e}"))?;
+    drop(probe);
+
+    stop_mock_runtime(&state);
+
+    let logs = Arc::new(Mutex::new(Vec::<MockLog>::new()));
+    let log_sink = Arc::clone(&logs);
+    let log_fn: Arc<dyn Fn(MockLog) + Send + Sync> = Arc::new(move |log| {
+        let mut guard = log_sink.lock().unwrap();
+        guard.push(log);
+        if guard.len() > 200 {
+            let overflow = guard.len() - 200;
+            guard.drain(0..overflow);
+        }
+    });
+
+    let rule_count = rules.len();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    tokio::spawn(async move {
+        if let Err(e) = run_mock_server(rules, addr, Some(rx), Some(log_fn)).await {
+            eprintln!("stubhouse mock server stopped: {e}");
+        }
+    });
+
+    let runtime = MockServerRuntime {
+        bind,
+        port,
+        rules: rule_count,
+        logs,
+        shutdown: Some(tx),
+    };
+    let status = mock_status_from_runtime(&runtime);
+    *state.mock_server.lock().unwrap() = Some(runtime);
+    Ok(status)
+}
+
+#[tauri::command]
+fn stop_mock_server(state: State<'_, AppState>) -> Result<MockServerStatus, String> {
+    stop_mock_runtime(&state);
+    Ok(MockServerStatus::stopped())
+}
+
+#[tauri::command]
+fn mock_server_status(state: State<'_, AppState>) -> Result<MockServerStatus, String> {
+    let guard = state.mock_server.lock().unwrap();
+    Ok(guard
+        .as_ref()
+        .map(mock_status_from_runtime)
+        .unwrap_or_else(MockServerStatus::stopped))
+}
+
+fn stop_mock_runtime(state: &AppState) {
+    let mut guard = state.mock_server.lock().unwrap();
+    if let Some(mut runtime) = guard.take() {
+        if let Some(tx) = runtime.shutdown.take() {
+            let _ = tx.send(());
+        }
+    }
+}
+
+fn mock_status_from_runtime(runtime: &MockServerRuntime) -> MockServerStatus {
+    let logs = runtime.logs.lock().unwrap().clone();
+    MockServerStatus {
+        running: true,
+        bind: runtime.bind.clone(),
+        port: runtime.port,
+        url: format!("http://{}:{}", runtime.bind, runtime.port),
+        rules: runtime.rules,
+        logs,
+    }
 }
 
 #[tauri::command]
@@ -284,6 +427,11 @@ fn main() {
             deactivate_env,
             active_env,
             save_env,
+            list_mock_scenarios,
+            activate_mock_scenario,
+            start_mock_server,
+            stop_mock_server,
+            mock_server_status,
             export_curl,
             import_postman,
         ])

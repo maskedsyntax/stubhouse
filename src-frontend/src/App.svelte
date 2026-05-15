@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Compose, HistoryReplay, RequestDefinition, ResponseDto } from "./lib/api";
+  import MockServerPanel from "./lib/MockServerPanel.svelte";
   import RequestPane from "./lib/RequestPane.svelte";
   import ResponsePanel from "./lib/ResponsePanel.svelte";
   import Sidebar from "./lib/Sidebar.svelte";
@@ -75,6 +76,11 @@
       await workspace.activate(value);
     }
   }
+
+  async function onScenarioChange(e: Event) {
+    const value = (e.currentTarget as HTMLSelectElement).value;
+    if (value !== "") await workspace.activateScenario(value);
+  }
 </script>
 
 <main class="flex h-full">
@@ -88,28 +94,50 @@
       </div>
 
       {#if workspace.info}
-        <label class="flex items-center gap-2 text-[11px] text-neutral-400">
-          <span class="uppercase tracking-widest text-neutral-600">env</span>
-          {#if workspace.activeEnv}
-            <span class="inline-block h-2 w-2 rounded-full {envColor(workspace.activeEnv.name)}"></span>
-          {:else}
-            <span class="inline-block h-2 w-2 rounded-full bg-neutral-700"></span>
-          {/if}
-          <select
-            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-[11px] text-neutral-200 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
-            value={workspace.activeEnv?.name ?? ""}
-            onchange={onEnvChange}
-            disabled={workspace.envs.length === 0}
-            title={workspace.envs.length === 0 ? "No environments — add files under .stubhouse/environments/" : "Active environment"}
-          >
-            <option value="">— none —</option>
-            {#each workspace.envs as env (env.name)}
-              <option value={env.name}>{env.name}</option>
-            {/each}
-          </select>
-        </label>
+        <div class="flex items-center gap-3">
+          <label class="flex items-center gap-2 text-[11px] text-neutral-400">
+            <span class="uppercase tracking-widest text-neutral-600">scenario</span>
+            <select
+              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-[11px] text-neutral-200 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
+              value={workspace.scenarios.find((scenario) => scenario.active_rules > 0)?.name ?? ""}
+              onchange={onScenarioChange}
+              disabled={workspace.scenarios.length === 0}
+              title={workspace.scenarios.length === 0 ? "No mock scenarios found under collections/*/mocks/" : "Active mock scenario"}
+            >
+              <option value="">— none —</option>
+              {#each workspace.scenarios as scenario (scenario.name)}
+                <option value={scenario.name}>
+                  {scenario.name} ({scenario.active_rules}/{scenario.rules})
+                </option>
+              {/each}
+            </select>
+          </label>
+
+          <label class="flex items-center gap-2 text-[11px] text-neutral-400">
+            <span class="uppercase tracking-widest text-neutral-600">env</span>
+            {#if workspace.activeEnv}
+              <span class="inline-block h-2 w-2 rounded-full {envColor(workspace.activeEnv.name)}"></span>
+            {:else}
+              <span class="inline-block h-2 w-2 rounded-full bg-neutral-700"></span>
+            {/if}
+            <select
+              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-[11px] text-neutral-200 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
+              value={workspace.activeEnv?.name ?? ""}
+              onchange={onEnvChange}
+              disabled={workspace.envs.length === 0}
+              title={workspace.envs.length === 0 ? "No environments — add files under .stubhouse/environments/" : "Active environment"}
+            >
+              <option value="">— none —</option>
+              {#each workspace.envs as env (env.name)}
+                <option value={env.name}>{env.name}</option>
+              {/each}
+            </select>
+          </label>
+        </div>
       {/if}
     </header>
+
+    <MockServerPanel />
 
     <div class="flex flex-1 flex-col gap-4 overflow-auto p-4">
       <RequestPane

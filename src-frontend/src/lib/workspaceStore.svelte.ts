@@ -1,23 +1,31 @@
 import {
   activateEnv,
+  activateMockScenario,
   clearHistory,
   deactivateEnv,
   importPostman,
   listEnvs,
   listHistory,
+  listMockScenarios,
   listRequests,
   loadHistory,
   loadRequest,
+  mockServerStatus,
   openWorkspace,
   saveRequest,
+  startMockServer,
+  stopMockServer,
   type ActiveEnvironment,
   type Compose,
   type EnvironmentEntry,
   type HistoryEntry,
   type HistoryReplay,
   type ImportSummary,
+  type MockServerStatus,
   type RequestDefinition,
   type RequestEntry,
+  type ScenarioActivation,
+  type ScenarioEntry,
   type WorkspaceInfo,
 } from "./api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -27,6 +35,8 @@ type State = {
   entries: RequestEntry[];
   history: HistoryEntry[];
   envs: EnvironmentEntry[];
+  scenarios: ScenarioEntry[];
+  mockServer: MockServerStatus | null;
   activeEnv: ActiveEnvironment | null;
   activeId: string | null;
   error: string | null;
@@ -38,6 +48,8 @@ function createStore() {
     entries: [],
     history: [],
     envs: [],
+    scenarios: [],
+    mockServer: null,
     activeEnv: null,
     activeId: null,
     error: null,
@@ -68,6 +80,8 @@ function createStore() {
       state.entries = await listRequests();
       state.history = await listHistory(100);
       state.envs = await listEnvs();
+      state.scenarios = await listMockScenarios();
+      state.mockServer = await mockServerStatus();
       state.activeEnv = null;
     } catch (e) {
       state.error = typeof e === "string" ? e : String(e);
@@ -89,6 +103,49 @@ function createStore() {
     try {
       await deactivateEnv();
       state.activeEnv = null;
+    } catch (e) {
+      state.error = typeof e === "string" ? e : String(e);
+    }
+  }
+
+  async function activateScenario(name: string): Promise<ScenarioActivation | null> {
+    if (!state.info) return null;
+    try {
+      const activation = await activateMockScenario(name);
+      state.scenarios = await listMockScenarios();
+      state.error = null;
+      return activation;
+    } catch (e) {
+      state.error = typeof e === "string" ? e : String(e);
+      return null;
+    }
+  }
+
+  async function refreshMockServer(): Promise<void> {
+    if (!state.info) return;
+    try {
+      state.mockServer = await mockServerStatus();
+      state.error = null;
+    } catch (e) {
+      state.error = typeof e === "string" ? e : String(e);
+    }
+  }
+
+  async function startMock(bind: string, port: number): Promise<void> {
+    if (!state.info) return;
+    try {
+      state.mockServer = await startMockServer(bind, port);
+      state.error = null;
+    } catch (e) {
+      state.error = typeof e === "string" ? e : String(e);
+    }
+  }
+
+  async function stopMock(): Promise<void> {
+    if (!state.info) return;
+    try {
+      state.mockServer = await stopMockServer();
+      state.error = null;
     } catch (e) {
       state.error = typeof e === "string" ? e : String(e);
     }
@@ -180,6 +237,8 @@ function createStore() {
     get entries() { return state.entries; },
     get history() { return state.history; },
     get envs() { return state.envs; },
+    get scenarios() { return state.scenarios; },
+    get mockServer() { return state.mockServer; },
     get activeEnv() { return state.activeEnv; },
     get activeId() { return state.activeId; },
     get error() { return state.error; },
@@ -192,6 +251,10 @@ function createStore() {
     wipeHistory,
     activate,
     deactivate,
+    activateScenario,
+    refreshMockServer,
+    startMock,
+    stopMock,
     pickAndImportPostman,
     load,
     save,
