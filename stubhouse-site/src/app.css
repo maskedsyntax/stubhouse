@@ -155,7 +155,7 @@ body::before {
 .display-3 {
   font-size: var(--text-display-3);
   line-height: 1.08;
-  letter-spacing: -0.035em;
+  letter-spacing: 0;
   font-weight: 400;
   margin: 0;
   font-family: var(--font-display);
@@ -164,7 +164,7 @@ body::before {
 .body-lg {
   font-size: var(--text-body-lg);
   line-height: 1.55;
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   color: var(--text-secondary);
   margin: 0;
 }

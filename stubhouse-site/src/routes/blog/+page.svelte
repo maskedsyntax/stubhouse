@@ -65,7 +65,7 @@
     margin: 0;
     font-size: 22px;
     font-weight: 500;
-    letter-spacing: -0.015em;
+    letter-spacing: 0;
   }
 
   .post__meta {

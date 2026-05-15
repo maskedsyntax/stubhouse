@@ -41,15 +41,15 @@
           {:else if slide === 1}
             <pre>{`200 OK · 128 ms\n{\n  "items": [\n    { "id": "u1", "name": "Ada" }\n  ]\n}`}</pre>
           {:else if slide === 2}
-            <pre>{`mock active → localhost`}</pre>
+            <pre>{`stubhouse serve . --port 4000\nmock server active → 127.0.0.1:4000`}</pre>
           {:else}
             <pre>{`404 Not Found\n{\n  "error": "User not found"\n}`}</pre>
           {/if}
         </div>
         {#if slide >= 3}
-          <p class="hero-ui__scenario caption">Scenario: <span class="mono">not_found</span></p>
+          <p class="hero-ui__scenario caption">Matched rule: <span class="mono">GET /users/:id</span></p>
         {:else if slide >= 2}
-          <p class="hero-ui__scenario caption">Scenario: <span class="mono">success</span></p>
+          <p class="hero-ui__scenario caption">Route trie: <span class="mono">exact > :param > *</span></p>
         {/if}
       </div>
     </section>

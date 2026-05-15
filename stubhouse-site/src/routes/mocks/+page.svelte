@@ -5,25 +5,28 @@
 
   const meta = {
     title: 'The mock server',
-    description: 'Embedded HTTP mocks, scenarios, state, recording, fault injection, and a control API built for real workflows.'
+    description: 'Embedded HTTP mocks, YAML rules, priority route matching, and the roadmap for scenarios, logs, faults, and recording.'
   };
 
   const ruleYaml = `matcher:
   method: GET
   path: "/users/:id"
-scenarios:
-  - name: success
-    active: true
-    response:
-      status: 200
-      body:
-        id: "{{params.id}}"
-        name: "Alice"
-  - name: not_found
-    response:
-      status: 404
-      body:
-        error: "User not found"`;
+response:
+  status: 200
+  headers:
+    content-type: application/json
+  body:
+    id: "{{params.id}}"
+    name: "Alice"`;
+
+  const roadmap = [
+    'Scenario model and switcher',
+    'Desktop mock server panel with live request log',
+    'Hot reload for mock YAML',
+    'Control API under /__mirage/*',
+    'Fault injection and selective passthrough',
+    'Recording mode and fixture capture'
+  ];
 </script>
 
 <svelte:head>
@@ -35,8 +38,8 @@ scenarios:
   <p class="eyebrow">Mocks</p>
   <h1 class="display-2">The mock server is the product.</h1>
   <p class="body-lg prose-width">
-    This page is the long-form treatment of what the home page previews: first-class rules, scenarios you can flip without restarting,
-    state that behaves like a service, recording, passthrough, and faults you can turn on like switches.
+    The core mock runtime is now in place: YAML rules, a Rust parser, a priority trie matcher, and `stubhouse serve` for headless
+    local APIs. The desktop panel, scenarios, hot reload, faults, passthrough, and recording are the next layer.
   </p>
 </section>
 
@@ -44,8 +47,8 @@ scenarios:
   <div class="container">
     <h2 class="display-3 fade-up">Architecture</h2>
     <p class="body-lg prose-width fade-up stagger-1">
-      The mock server is an embedded Tokio task beside the UI. It binds locally, matches with a priority trie, evaluates Rhai where
-      you need logic, and streams events back to the panels you already have open.
+      The mock server is built on Hyper and Tokio in the Rust core. Today it binds locally from the CLI, loads workspace mock rules,
+      and matches routes with exact paths, path params, wildcards, and catch-alls.
     </p>
     <DemoFrame title="Diagram — runtime" class="fade-up stagger-2">
       <div class="diagram mono">
@@ -68,8 +71,8 @@ scenarios:
     <div>
       <h2 class="display-3 fade-up">Rule anatomy</h2>
       <p class="body-lg fade-up stagger-1">
-        A rule is a matcher plus responses. Scenarios sit under the same matcher so you can rehearse success, errors, and slow paths
-        without duplicating routes.
+        A rule is a matcher plus a response. Scenario variants will sit under the same matcher later; the current implementation keeps
+        the shape simple while the runtime and matcher settle.
       </p>
     </div>
     <div class="fade-up stagger-2">
@@ -80,16 +83,15 @@ scenarios:
 
 <SectionReveal class="section">
   <div class="container">
-    <h2 class="display-3 fade-up">Control API</h2>
+    <h2 class="display-3 fade-up">Next up</h2>
     <p class="body-lg prose-width fade-up stagger-1">
-      Everything under `/__mirage/` is there for your tests: status, scenarios, resets, logs, rule dumps, fault toggles.
+      Phase 2 is focused on making the mock runtime interactive from the desktop app and controllable from tests.
     </p>
-    <pre class="mono table-like fade-up stagger-2">GET  /__mirage/status
-POST /__mirage/scenario
-POST /__mirage/reset
-GET  /__mirage/rules
-GET  /__mirage/log
-POST /__mirage/fault</pre>
+    <ul class="mono table-like fade-up stagger-2">
+      {#each roadmap as item}
+        <li>{item}</li>
+      {/each}
+    </ul>
   </div>
 </SectionReveal>
 
@@ -114,6 +116,10 @@ POST /__mirage/fault</pre>
     background: var(--bg-surface);
     font-size: 13px;
     line-height: 1.6;
-    white-space: pre-wrap;
+    color: var(--text-secondary);
+  }
+
+  .table-like li + li {
+    margin-top: 8px;
   }
 </style>

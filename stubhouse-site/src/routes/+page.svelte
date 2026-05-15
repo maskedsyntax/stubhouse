@@ -7,8 +7,6 @@
   import DemoFrame from '$lib/components/DemoFrame.svelte';
   import SectionReveal from '$lib/SectionReveal.svelte';
   import HeroDemo from '$lib/home/HeroDemo.svelte';
-  import RecordingFlow from '$lib/home/RecordingFlow.svelte';
-  import ScenarioDemo from '$lib/home/ScenarioDemo.svelte';
 
   const meta = {
     title: 'StubHouse — local-first API client and mock server',
@@ -33,18 +31,19 @@ tags:
   - users
   - read`;
 
-  const rhaiExample = `test("Status is 200")        { response.status == 200 }
-test("Body has user field")  { response.json()["user"] != null }
-test("Response under 500ms") { response.time_ms < 500 }`;
+  const cliExample = `# Create a workspace, validate it, serve mocks
+stubhouse init .
+stubhouse validate .
+stubhouse envs .
+stubhouse import postman ./postman_collection.json
 
-  const ciExample = `# CI: serve mocks, run tests, switch scenario
+stubhouse serve . --port 4000`;
+
+  const ciExample = `# CI: serve local mocks, then run your app tests
 stubhouse serve . --port 4000 --env test &
 MOCK_PID=$!
 
 npm test
-
-stubhouse scenario set mock_payment checkout_failure
-npm test -- --grep "error handling"
 
 kill $MOCK_PID`;
 
@@ -52,41 +51,50 @@ kill $MOCK_PID`;
 $ cd stubhouse && cargo build --release
    Finished release [optimized] target(s) in 2m 14s`;
 
-  const curlExample = `curl -X POST http://127.0.0.1:4000/users -d '{"name":"Ada"}'
-curl http://127.0.0.1:4000/users/usr_1
-curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
+  const curlExample = `curl http://127.0.0.1:4000/users/usr_1
+curl -X POST http://127.0.0.1:4000/users -d '{"name":"Ada"}'
+stubhouse export curl ./collections/users/get-user.yaml --env dev`;
 
-  const faults = [
+  const shipped = [
     {
-      name: 'connection_reset',
-      hint: 'TCP reset mid-response — exercise reconnect paths.',
-      yaml: 'fault: connection_reset'
+      name: 'HTTP runtime',
+      hint: 'HTTP/1.1, HTTP/2, TLS, auth composition, and JSON/text/form bodies.',
+      yaml: 'request engine: reqwest + rustls'
     },
     {
-      name: 'timeout',
-      hint: 'No reply until the client gives up.',
-      yaml: 'fault: timeout'
+      name: 'Environments',
+      hint: 'Workspace environment files, variable resolution, and inline resolved-URL preview.',
+      yaml: 'url: "{{base_url}}/users/{{user_id}}"'
     },
     {
-      name: 'slow_response',
-      hint: 'Fixed or random tail latency.',
-      yaml: 'delay_ms:\n  type: random\n  min: 800\n  max: 3000'
+      name: 'Import / export',
+      hint: 'Postman Collection v2.1 import and copy/export as cURL.',
+      yaml: 'stubhouse import postman collection.json'
     },
     {
-      name: 'partial_body',
-      hint: 'Truncated payloads for parser hardening.',
-      yaml: 'fault: partial_body'
+      name: 'Headless mocks',
+      hint: 'Embedded Hyper mock server with YAML rules and priority route matching.',
+      yaml: 'stubhouse serve . --port 4000'
     },
     {
-      name: 'random_5xx',
-      hint: 'Rare server errors on demand.',
-      yaml: 'fault:\n  type: random_5xx\n  probability: 0.12'
+      name: 'Route matcher',
+      hint: 'Exact paths, path params, wildcards, catch-alls, and method matching.',
+      yaml: 'GET /users/:id'
     },
     {
-      name: 'passthrough',
-      hint: 'Forward to upstream when you need a real edge.',
-      yaml: 'passthrough: true'
+      name: 'History',
+      hint: 'SQLite-backed request history for the desktop request workflow.',
+      yaml: 'history: sqlite'
     }
+  ];
+
+  const nextMockFeatures = [
+    'Scenario switcher for named response states',
+    'Mock server panel with on/off, port picker, and live request log',
+    'Hot reload for mock YAML changes',
+    'Control API under /__mirage/*',
+    'Fault injection and selective passthrough',
+    'Recording mode, fixtures, and stateful resources'
   ];
 </script>
 
@@ -141,7 +149,7 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     <div class="hero__demo hero-ent hero-ent--5">
       <HeroDemo />
       <p class="caption hero__demo-note">
-        One workspace for real requests, local mock rules, scenarios, and recorded fixtures.
+        One workspace for real requests, environments, imports, cURL export, and local mock rules.
       </p>
     </div>
   </div>
@@ -153,8 +161,8 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
       <p class="eyebrow fade-up">Two tools. One binary.</p>
       <h2 class="display-2 fade-up stagger-1">A request client and a mock server, both first-class.</h2>
       <p class="body-lg fade-up stagger-2">
-        Other API clients bolt on mocks as a paid afterthought or a separate process. StubHouse was built around the assumption
-        that you spend half your day calling APIs and the other half pretending an API exists. Both deserve a real tool.
+        Other API clients bolt on mocks as a paid afterthought or a separate process. StubHouse already pairs the daily request
+        workflow with a headless local mock runtime, and the desktop mock panel is the next piece of active development.
       </p>
     </div>
     <div class="dual fade-up stagger-2">
@@ -170,11 +178,11 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
       <DemoFrame title="Mocks — rules">
         <div class="dual__panel">
           <ul class="mono dual__list">
-            <li>GET /users <span class="dual__tag">success</span></li>
-            <li>POST /users <span class="dual__tag">success</span></li>
-            <li>GET /users/:id <span class="dual__tag">not_found</span></li>
+            <li>GET /users <span class="dual__tag">exact</span></li>
+            <li>POST /users <span class="dual__tag">exact</span></li>
+            <li>GET /users/:id <span class="dual__tag">param</span></li>
           </ul>
-          <p class="caption dual__hint">Scenario dropdowns live next to the routes they own.</p>
+          <p class="caption dual__hint">Routes are matched by priority: exact, params, wildcards, then catch-all.</p>
         </div>
       </DemoFrame>
     </div>
@@ -201,43 +209,48 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
 <SectionReveal class="section">
   <div class="container mock-head">
     <p class="eyebrow fade-up">The mock server</p>
-    <h2 class="display-2 fade-up stagger-1">Three things worth doing in-process.</h2>
+      <h2 class="display-2 fade-up stagger-1">The mock foundation is in the binary now.</h2>
   </div>
   <div class="container mock-rows">
     <article class="mock-row">
       <div>
-        <h3 class="display-3 fade-up">Scenarios</h3>
+        <h3 class="display-3 fade-up">YAML rules</h3>
         <p class="body-lg fade-up stagger-1">
-          Switch your mock from `success` to `not_found` to `server_error` without restarting anything. From the UI, from the CLI,
-          or from your test runner via the control API.
+          Mock rules live next to collections, parse in Rust, and are served from the same core used by the desktop app. The current
+          matcher handles methods, exact paths, path params, wildcards, and catch-alls.
         </p>
       </div>
       <div class="fade-up stagger-2">
-        <ScenarioDemo />
+        <CodeBlock filename=".stubhouse/collections/users/mocks/get-user.yaml" language="yaml" code={`matcher:\n  method: GET\n  path: /users/:id\nresponse:\n  status: 200\n  headers:\n    content-type: application/json\n  body:\n    id: "{{params.id}}"\n    name: Ada`} />
       </div>
     </article>
     <article class="mock-row mock-row--flip">
       <div>
-        <h3 class="display-3 fade-up">Stateful mocks</h3>
+        <h3 class="display-3 fade-up">Headless serve</h3>
         <p class="body-lg fade-up stagger-1">
-          A mock that behaves like an API. POST creates. PUT updates. DELETE removes. GET returns what you wrote. All in memory, all
-          reset on demand.
+          `stubhouse serve` starts the local mock runtime without opening the app. Frontend tests can point at `127.0.0.1` while the
+          backend is still being written.
         </p>
       </div>
       <div class="fade-up stagger-2">
-        <CodeBlock filename=".stubhouse/collections/users/mocks/resources.yaml" language="yaml" code={`mock_resources:\n  - path: /users\n    id_field: id\n    seed_file: ./fixtures/users.yaml\n    auto_crud: true`} />
+        <CodeBlock filename="terminal" language="bash" code={cliExample} />
         <pre class="mono curl-block" aria-label="Example curls">{curlExample}</pre>
       </div>
     </article>
     <article class="mock-row">
       <div>
-        <h3 class="display-3 fade-up">Recording mode</h3>
+        <h3 class="display-3 fade-up">Next in mocks</h3>
         <p class="body-lg fade-up stagger-1">
-          Point StubHouse at a real API. Make some calls. Save them. Replay them offline. Forever.
+          The roadmap is deliberately focused on the parts that make mocks useful during product work: scenarios, logs, hot reload,
+          control APIs, faults, passthrough, and recording.
         </p>
       </div>
       <div class="fade-up stagger-2">
-        <RecordingFlow />
+        <ul class="roadmap-list">
+          {#each nextMockFeatures as feature}
+            <li>{feature}</li>
+          {/each}
+        </ul>
       </div>
     </article>
   </div>
@@ -245,14 +258,14 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
 
 <SectionReveal class="section">
   <div class="container">
-    <p class="eyebrow fade-up">Chaos, on demand</p>
-    <h2 class="display-2 fade-up stagger-1">Test the unhappy path before production does.</h2>
+    <p class="eyebrow fade-up">Available now</p>
+    <h2 class="display-2 fade-up stagger-1">The daily API client path is already covered.</h2>
     <p class="body-lg prose-width fade-up stagger-2">
-      Connection resets. Timeouts. Slow responses. Partial bodies. Random 5xx at a configurable rate. Every fault is a checkbox. Your
-      retry logic finally has something to retry against.
+      Phase 1 is complete: requests, auth composition, environments, interpolation, history, import, cURL export, and the CLI. The
+      mock runtime foundation is underway on top of that same file-based workspace.
     </p>
     <div class="fault-grid fade-up stagger-3">
-      {#each faults as f}
+      {#each shipped as f}
         <div class="fault-card" title={f.hint}>
           <p class="mono fault-card__name">{f.name}</p>
           <p class="caption fault-card__hint">{f.hint}</p>
@@ -266,21 +279,20 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
 <SectionReveal class="section">
   <div class="container grid-2">
     <div>
-      <p class="eyebrow fade-up">Automation, sandboxed</p>
-      <h2 class="display-2 fade-up stagger-1">Logic that doesn't need a Node.js runtime.</h2>
+      <p class="eyebrow fade-up">Automation path</p>
+      <h2 class="display-2 fade-up stagger-1">A CLI first, then scripting on top.</h2>
       <p class="body-lg fade-up stagger-2">
-        StubHouse uses Rhai — a sandboxed scripting language designed for embedding in Rust. Pre-request scripts. Post-response
-        assertions. Mock rule conditions. All run in a sandbox with no filesystem, no network, no escape. No 50MB V8 binary in your
-        dock.
+        The CLI can initialize, validate, inspect environments, import Postman collections, export cURL, and serve mocks. Rhai
+        scripting and the test runner are planned for the next phase, after the mock server workflow is complete.
       </p>
     </div>
     <div class="automation-stack fade-up stagger-2">
-      <CodeBlock filename="tests.rhai" language="rhai" code={rhaiExample} />
+      <CodeBlock filename="terminal" language="bash" code={cliExample} />
       <DemoFrame title="Test runner">
         <div class="tests__panel mono">
-          <p>Status is 200 · <span class="ok">pass</span> · 4 ms</p>
-          <p>Body has user field · <span class="ok">pass</span> · 1 ms</p>
-          <p>Response under 500ms · <span class="ok">pass</span></p>
+          <p>Rhai assertions · planned</p>
+          <p>JUnit XML output · planned</p>
+          <p>Mock rule conditions · planned</p>
         </div>
       </DemoFrame>
     </div>
@@ -293,8 +305,8 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
       <p class="eyebrow fade-up">It's a binary</p>
       <h2 class="display-2 fade-up stagger-1"><code class="mono ci-kicker">stubhouse serve</code> and ship.</h2>
       <p class="body-lg fade-up stagger-2">
-        The same engine that runs in the desktop app runs from the command line. Spin up your mocks in CI. Run your assertion suite
-        against them. Get JUnit XML out the other side. Ten kilobytes of YAML replaces a thousand lines of `nock`.
+        The same mock engine can run from the command line. Spin up local API responses before your app tests, point the frontend at
+        `127.0.0.1`, and keep backend availability out of the loop.
       </p>
     </div>
     <div class="fade-up stagger-2">
@@ -708,6 +720,21 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     white-space: pre-wrap;
   }
 
+  .roadmap-list {
+    margin: 0;
+    padding: 16px 18px 16px 34px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    color: var(--text-secondary);
+    font-size: var(--text-body-sm);
+    line-height: 1.65;
+  }
+
+  .roadmap-list li + li {
+    margin-top: 8px;
+  }
+
   @media (max-width: 639px) {
     .curl-block {
       overflow-x: auto;
@@ -806,13 +833,9 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     gap: 14px;
   }
 
-  .tests__panel .ok {
-    color: var(--text-primary);
-  }
-
   .ci-kicker {
     font-size: inherit;
-    letter-spacing: -0.03em;
+    letter-spacing: 0;
   }
 
   .chart__row {
@@ -898,7 +921,7 @@ curl -X DELETE http://127.0.0.1:4000/users/usr_1`;
     font-family: var(--font-sans);
     font-size: var(--text-h2, 28px);
     line-height: 1.18;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
     font-weight: 500;
   }
 

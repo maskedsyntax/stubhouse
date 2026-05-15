@@ -25,11 +25,11 @@
     </a>
     <a class="card link-inline" href="https://docs.stubhouse.dev/mocks">
       <h2 class="display-3">Mock server guide</h2>
-      <p class="caption">Rules, scenarios, state, recording, faults, control API.</p>
+      <p class="caption">YAML rules, route matching, headless serve, and Phase 2 roadmap.</p>
     </a>
     <a class="card link-inline" href="https://docs.stubhouse.dev/cli">
       <h2 class="display-3">CLI reference</h2>
-      <p class="caption">`serve`, `test`, `scenario`, CI snippets.</p>
+      <p class="caption">`init`, `validate`, `envs`, `import postman`, `export curl`, `serve`.</p>
     </a>
   </div>
 
@@ -41,10 +41,10 @@
     <li>Environment variables</li>
     <li>Import formats</li>
     <li>YAML schemas</li>
-    <li>Testing with JUnit output</li>
+    <li>Copy and export as cURL</li>
     <li>Headless `stubhouse serve`</li>
-    <li>Passthrough + recording</li>
-    <li>Plugin manifests</li>
+    <li>Postman Collection v2.1 import</li>
+    <li>Mock scenarios, passthrough, recording, and scripts roadmap</li>
     <li>Troubleshooting TLS</li>
   </ul>
 </section>

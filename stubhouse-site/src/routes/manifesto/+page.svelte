@@ -22,8 +22,8 @@
 
   <p>
     Mocking is often treated as a concession: a stopgap until the “real” service appears. We treat it as part of the craft. A mock
-    with scenarios, state, and an honest control surface is a design tool. It lets you rehearse failures you cannot yet buy from an
-    upstream team.
+    runtime that grows into scenarios, state, and an honest control surface becomes a design tool. It lets you rehearse failures you
+    cannot yet buy from an upstream team.
   </p>
 
   <p>
@@ -56,7 +56,7 @@
     line-height: 1.2;
     color: var(--text-primary);
     margin: 0 0 32px;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
 
   .manifesto p {

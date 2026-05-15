@@ -14,7 +14,7 @@
   <p class="eyebrow">Pricing</p>
   <h1 class="display-2">Free, forever.</h1>
   <p class="body-lg prose-width">
-    Everything in the desktop app ships without a login: requests, mocks, the CLI, Rhai scripting, environments, imports/exports.
+    The desktop app, CLI, request workflow, environments, imports, cURL export, history, and local mock runtime ship without a login.
     No telemetry. No nag screens.
   </p>
 

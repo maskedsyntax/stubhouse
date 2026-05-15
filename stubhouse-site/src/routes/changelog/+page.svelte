@@ -6,12 +6,19 @@
 
   const releases = [
     {
-      version: '0.1.0',
-      date: '2026-05-01',
-      summary: 'Foundational workspace parsing and a minimal request path through the Rust core.',
+      version: '0.2.0-dev',
+      date: '2026-05-15',
+      summary: 'Phase 1 is complete and the mock server foundation is now in active development.',
       sections: {
-        New: ['Workspace manifest', 'SQLite request history'],
-        Improved: ['Request compose draft UI'],
+        New: [
+          'Environment files and variable interpolation wired through the app',
+          'Environment switcher and resolved URL preview',
+          'Postman Collection v2.1 import',
+          'Copy/export as cURL',
+          'CLI commands for init, validate, list, show, envs, import, export, and serve',
+          'Embedded mock server module with YAML rule parsing and priority route matching'
+        ],
+        Improved: ['Workspace layout now keeps environments beside collections at the workspace root'],
         Fixed: [],
         Breaking: []
       },
@@ -73,7 +80,7 @@
     margin: 0;
     font-size: 28px;
     font-weight: 500;
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
 
   .release__sub {

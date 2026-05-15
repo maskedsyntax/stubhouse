@@ -1,5 +1,5 @@
 {
-  "updated": "2026-05-08",
+  "updated": "2026-05-15",
   "rows": [
     {
       "feature": "Local-first (no account)",
@@ -30,7 +30,7 @@
     },
     {
       "feature": "Stateful mocks",
-      "stubhouse": true,
+      "stubhouse": "planned",
       "postman": false,
       "insomnia": false,
       "bruno": false,
@@ -39,7 +39,7 @@
     },
     {
       "feature": "Scenario switching",
-      "stubhouse": true,
+      "stubhouse": "planned",
       "postman": false,
       "insomnia": false,
       "bruno": false,
@@ -48,7 +48,7 @@
     },
     {
       "feature": "Recording mode",
-      "stubhouse": true,
+      "stubhouse": "planned",
       "postman": "partial",
       "insomnia": false,
       "bruno": false,
@@ -57,7 +57,7 @@
     },
     {
       "feature": "Fault injection",
-      "stubhouse": true,
+      "stubhouse": "planned",
       "postman": false,
       "insomnia": false,
       "bruno": false,
@@ -66,7 +66,7 @@
     },
     {
       "feature": "Mock control API",
-      "stubhouse": true,
+      "stubhouse": "planned",
       "postman": false,
       "insomnia": false,
       "bruno": false,
@@ -84,7 +84,7 @@
     },
     {
       "feature": "OpenAPI schema validation",
-      "stubhouse": true,
+      "stubhouse": "planned",
       "postman": true,
       "insomnia": true,
       "bruno": false,
@@ -102,7 +102,7 @@
     },
     {
       "feature": "Scripting language",
-      "stubhouse": "Rhai",
+      "stubhouse": "planned Rhai",
       "postman": "JS (V8)",
       "insomnia": "JS (V8)",
       "bruno": "JS (V8)",
