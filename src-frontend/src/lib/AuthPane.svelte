@@ -21,17 +21,17 @@
   }
 
   const inputCls =
-    "w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs outline-none focus:border-indigo-500";
-  const labelCls = "flex flex-col gap-1 text-[10px] uppercase tracking-widest text-neutral-500";
+    "w-full rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-50 outline-none placeholder:text-neutral-500 focus:border-indigo-500";
+  const labelCls = "flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-neutral-400";
 </script>
 
 <div class="flex flex-col gap-3 p-3">
   <label class="flex items-center gap-2">
-    <span class="text-[10px] uppercase tracking-widest text-neutral-500">Type</span>
+    <span class="text-xs font-medium uppercase tracking-wide text-neutral-400">Type</span>
     <select
       value={auth.kind}
       onchange={(e) => setKind((e.currentTarget as HTMLSelectElement).value as Auth["kind"])}
-      class="rounded border border-neutral-700 bg-neutral-950 px-2 py-1 text-xs outline-none focus:border-indigo-500"
+      class="rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-50 outline-none focus:border-indigo-500"
     >
       {#each types as t (t.value)}
         <option value={t.value}>{t.label}</option>
@@ -74,6 +74,6 @@
       </label>
     </div>
   {:else}
-    <p class="text-xs text-neutral-600">No auth will be attached to this request.</p>
+    <p class="text-sm text-neutral-500">No auth will be attached to this request.</p>
   {/if}
 </div>

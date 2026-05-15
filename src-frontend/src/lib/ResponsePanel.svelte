@@ -35,33 +35,33 @@
   }
 </script>
 
-<section class="flex flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-900">
+<section class="flex flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-900/90 shadow-sm shadow-black/20">
   {#if loading}
-    <div class="flex flex-1 items-center justify-center text-neutral-500">sending…</div>
+    <div class="flex flex-1 items-center justify-center text-sm text-neutral-400">sending…</div>
   {:else if error}
     <div class="flex flex-1 flex-col gap-2 p-4">
-      <div class="text-xs uppercase tracking-wider text-red-400">Error</div>
-      <pre class="whitespace-pre-wrap text-red-300">{error}</pre>
+      <div class="text-xs font-medium uppercase tracking-wide text-red-300">Error</div>
+      <pre class="whitespace-pre-wrap text-sm leading-6 text-red-200">{error}</pre>
     </div>
   {:else if response}
-    <header class="flex items-center gap-3 border-b border-neutral-800 px-3 py-2 text-xs">
+    <header class="flex items-center gap-3 border-b border-neutral-800 px-3 py-2 text-sm">
       <span class="rounded border px-2 py-0.5 font-semibold {statusTone(response.status)}">
         {response.status}
       </span>
-      <span class="text-neutral-400">{response.elapsed_ms} ms</span>
+      <span class="text-neutral-300">{response.elapsed_ms} ms</span>
       <span class="text-neutral-700">·</span>
-      <span class="text-neutral-400">{fmtBytes(response.size_bytes)}</span>
-      <span class="ml-auto text-neutral-600">{response.headers.length} headers</span>
+      <span class="text-neutral-300">{fmtBytes(response.size_bytes)}</span>
+      <span class="ml-auto text-neutral-500">{response.headers.length} headers</span>
     </header>
 
     <div class="flex items-center gap-1 border-b border-neutral-800 px-2 pt-1">
       {#each [{ id: "body" as Tab, label: "Body" }, { id: "headers" as Tab, label: "Headers" }] as t (t.id)}
         <button
           onclick={() => (activeTab = t.id)}
-          class="border-b-2 px-3 py-1.5 text-[11px] uppercase tracking-widest
+          class="border-b-2 px-3 py-2 text-xs font-medium uppercase tracking-wide
                  {activeTab === t.id
                    ? 'border-indigo-500 text-neutral-100'
-                   : 'border-transparent text-neutral-500 hover:text-neutral-300'}"
+                   : 'border-transparent text-neutral-400 hover:text-neutral-200'}"
         >
           {t.label}
         </button>
@@ -69,15 +69,15 @@
     </div>
 
     {#if activeTab === "body"}
-      <pre class="flex-1 overflow-auto p-3 text-xs leading-relaxed text-neutral-100">{tryPrettyJson(response.body)}</pre>
+      <pre class="flex-1 overflow-auto p-4 text-sm leading-6 text-neutral-50">{tryPrettyJson(response.body)}</pre>
     {:else}
       <div class="flex-1 overflow-auto">
-        <table class="w-full text-xs">
+        <table class="w-full text-sm">
           <tbody>
             {#each response.headers as [k, v], i (i)}
               <tr class="border-b border-neutral-900">
-                <td class="w-1/3 px-3 py-1.5 align-top text-neutral-400">{k}</td>
-                <td class="px-3 py-1.5 align-top text-neutral-100 break-all">{v}</td>
+                <td class="w-1/3 px-3 py-2 align-top text-neutral-300">{k}</td>
+                <td class="px-3 py-2 align-top text-neutral-50 break-all">{v}</td>
               </tr>
             {/each}
           </tbody>
@@ -85,7 +85,7 @@
       </div>
     {/if}
   {:else}
-    <div class="flex flex-1 items-center justify-center text-neutral-600">
+    <div class="flex flex-1 items-center justify-center text-sm text-neutral-500">
       no response yet
     </div>
   {/if}

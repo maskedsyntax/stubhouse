@@ -6,7 +6,63 @@
   :root {
     color-scheme: dark;
   }
+
+  html {
+    font-family:
+      ui-sans-serif,
+      -apple-system,
+      BlinkMacSystemFont,
+      "SF Pro Text",
+      "Segoe UI",
+      Inter,
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      sans-serif;
+    font-size: 15px;
+    text-rendering: optimizeLegibility;
+  }
+
   body {
+    min-width: 960px;
+    background: #050505;
+    color: #e7e7e7;
     -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
+    line-height: 1.5;
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+    letter-spacing: 0;
+  }
+
+  input,
+  textarea,
+  select {
+    color: #f1f1f1;
+    caret-color: #a5b4fc;
+  }
+
+  textarea,
+  pre,
+  code,
+  .font-mono {
+    font-family:
+      ui-monospace,
+      SFMono-Regular,
+      "SF Mono",
+      Menlo,
+      Consolas,
+      "Liberation Mono",
+      monospace;
+  }
+
+  ::placeholder {
+    color: #737373;
   }
 }

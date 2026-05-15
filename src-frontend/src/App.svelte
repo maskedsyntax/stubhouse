@@ -87,18 +87,18 @@
   <Sidebar onLoad={loadDef} onReplay={loadReplay} />
 
   <div class="flex flex-1 flex-col">
-    <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2">
-      <div class="text-xs uppercase tracking-widest text-neutral-500">
+    <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
+      <div class="text-xs font-medium uppercase tracking-wide text-neutral-400">
         StubHouse <span class="text-neutral-700">·</span>
-        <span class="text-neutral-400">Phase 1 slice C</span>
+        <span class="text-neutral-300">Phase 1 slice C</span>
       </div>
 
       {#if workspace.info}
         <div class="flex items-center gap-3">
-          <label class="flex items-center gap-2 text-[11px] text-neutral-400">
-            <span class="uppercase tracking-widest text-neutral-600">scenario</span>
+          <label class="flex items-center gap-2 text-xs text-neutral-300">
+            <span class="font-medium uppercase tracking-wide text-neutral-500">scenario</span>
             <select
-              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-[11px] text-neutral-200 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
+              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
               value={workspace.scenarios.find((scenario) => scenario.active_rules > 0)?.name ?? ""}
               onchange={onScenarioChange}
               disabled={workspace.scenarios.length === 0}
@@ -113,15 +113,15 @@
             </select>
           </label>
 
-          <label class="flex items-center gap-2 text-[11px] text-neutral-400">
-            <span class="uppercase tracking-widest text-neutral-600">env</span>
+          <label class="flex items-center gap-2 text-xs text-neutral-300">
+            <span class="font-medium uppercase tracking-wide text-neutral-500">env</span>
             {#if workspace.activeEnv}
               <span class="inline-block h-2 w-2 rounded-full {envColor(workspace.activeEnv.name)}"></span>
             {:else}
               <span class="inline-block h-2 w-2 rounded-full bg-neutral-700"></span>
             {/if}
             <select
-              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-[11px] text-neutral-200 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
+              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
               value={workspace.activeEnv?.name ?? ""}
               onchange={onEnvChange}
               disabled={workspace.envs.length === 0}

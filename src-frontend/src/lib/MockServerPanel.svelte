@@ -29,20 +29,20 @@
 {#if workspace.info}
   <section class="border-b border-neutral-900 bg-neutral-950/70 px-4 py-3">
     <div class="flex flex-wrap items-center gap-3">
-      <div class="flex items-center gap-2 text-[11px] uppercase tracking-widest text-neutral-600">
+      <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-neutral-400">
         <span class="h-2 w-2 rounded-full {workspace.mockServer?.running ? 'bg-emerald-500' : 'bg-neutral-700'}"></span>
         Mock server
       </div>
 
       <input
-        class="w-32 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:border-indigo-600 focus:outline-none"
+        class="w-32 rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus:border-indigo-600 focus:outline-none"
         bind:value={bind}
         disabled={workspace.mockServer?.running || busy}
         aria-label="Mock server bind address"
       />
 
       <input
-        class="w-20 rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs text-neutral-200 focus:border-indigo-600 focus:outline-none"
+        class="w-20 rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus:border-indigo-600 focus:outline-none"
         type="number"
         min="1"
         max="65535"
@@ -53,18 +53,18 @@
 
       {#if workspace.mockServer?.running}
         <button
-          class="rounded border border-rose-900/70 px-3 py-1 text-xs text-rose-200 hover:border-rose-700 disabled:opacity-50"
+          class="rounded border border-rose-900/70 px-3 py-1.5 text-xs font-medium text-rose-100 hover:border-rose-700 disabled:opacity-50"
           onclick={stop}
           disabled={busy}
         >
           Stop
         </button>
-        <span class="text-xs text-neutral-500">
+        <span class="text-sm text-neutral-400">
           {workspace.mockServer.url} · {workspace.mockServer.rules} rules
         </span>
       {:else}
         <button
-          class="rounded border border-emerald-900/70 px-3 py-1 text-xs text-emerald-200 hover:border-emerald-700 disabled:opacity-50"
+          class="rounded border border-emerald-900/70 px-3 py-1.5 text-xs font-medium text-emerald-100 hover:border-emerald-700 disabled:opacity-50"
           onclick={start}
           disabled={busy}
         >
@@ -74,16 +74,16 @@
     </div>
 
     {#if workspace.mockServer?.running}
-      <div class="mt-3 max-h-32 overflow-auto border-t border-neutral-900 pt-2 font-mono text-[11px] text-neutral-400">
+      <div class="mt-3 max-h-32 overflow-auto border-t border-neutral-900 pt-2 font-mono text-xs leading-5 text-neutral-300">
         {#if workspace.mockServer.logs.length === 0}
-          <div class="text-neutral-600">No requests yet.</div>
+          <div class="text-neutral-500">No requests yet.</div>
         {:else}
           {#each workspace.mockServer.logs.slice().reverse() as log}
             <div class="grid grid-cols-[56px_44px_minmax(0,1fr)_minmax(8rem,auto)] gap-2 py-0.5">
-              <span class="text-neutral-500">{log.method}</span>
+              <span class="text-neutral-400">{log.method}</span>
               <span class={log.status >= 500 ? "text-rose-300" : log.status >= 400 ? "text-amber-300" : "text-emerald-300"}>{log.status}</span>
               <span class="truncate text-neutral-300">{log.path}</span>
-              <span class="truncate text-neutral-600">{log.matched_rule ?? "(no match)"}</span>
+              <span class="truncate text-neutral-500">{log.matched_rule ?? "(no match)"}</span>
             </div>
           {/each}
         {/if}

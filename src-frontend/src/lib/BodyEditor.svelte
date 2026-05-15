@@ -53,10 +53,10 @@
     {#each modes as m (m.value)}
       <button
         onclick={() => setMode(m.value)}
-        class="rounded px-2.5 py-1 text-[10px] uppercase tracking-widest
+        class="rounded px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide
                {body.kind === m.value
                  ? 'bg-indigo-600 text-white'
-                 : 'border border-neutral-800 text-neutral-400 hover:border-indigo-600 hover:text-indigo-400'}"
+                 : 'border border-neutral-800 text-neutral-300 hover:border-indigo-600 hover:text-indigo-300'}"
       >
         {m.label}
       </button>
@@ -68,24 +68,24 @@
       bind:value={body.text}
       spellcheck="false"
       placeholder={'{\n  "name": "Alice"\n}'}
-      class="h-48 resize-y rounded border border-neutral-800 bg-neutral-950 p-2 font-mono text-xs outline-none focus:border-indigo-500"
+      class="h-48 resize-y rounded border border-neutral-800 bg-neutral-950 p-3 font-mono text-sm leading-6 text-neutral-50 outline-none placeholder:text-neutral-500 focus:border-indigo-500"
     ></textarea>
   {:else if body.kind === "text"}
     <label class="flex items-center gap-2">
-      <span class="text-[10px] uppercase tracking-widest text-neutral-500">Content-Type</span>
+      <span class="text-xs uppercase tracking-wide text-neutral-400">Content-Type</span>
       <input
         bind:value={body.content_type}
-        class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs outline-none focus:border-indigo-500"
+        class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
       />
     </label>
     <textarea
       bind:value={body.text}
       spellcheck="false"
-      class="h-48 resize-y rounded border border-neutral-800 bg-neutral-950 p-2 font-mono text-xs outline-none focus:border-indigo-500"
+      class="h-48 resize-y rounded border border-neutral-800 bg-neutral-950 p-3 font-mono text-sm leading-6 text-neutral-50 outline-none focus:border-indigo-500"
     ></textarea>
   {:else if body.kind === "form"}
     <KeyValueTable bind:rows={formRows} keyPlaceholder="field" valuePlaceholder="value" />
   {:else}
-    <p class="text-xs text-neutral-600">No request body.</p>
+    <p class="text-sm text-neutral-500">No request body.</p>
   {/if}
 </div>

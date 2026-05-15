@@ -194,26 +194,26 @@
   }
 </script>
 
-<section class="flex flex-col gap-0 rounded-md border border-neutral-800 bg-neutral-900">
+<section class="flex flex-col gap-0 rounded-md border border-neutral-800 bg-neutral-900/90 shadow-sm shadow-black/20">
   <div class="flex items-center gap-2 border-b border-neutral-800 px-2 py-2">
     <input
       bind:value={name}
       type="text"
       placeholder="Untitled request"
-      class="flex-1 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-neutral-100 outline-none hover:border-neutral-800 focus:border-indigo-500"
+      class="flex-1 rounded border border-transparent bg-transparent px-2 py-1 text-[15px] font-semibold text-neutral-50 outline-none hover:border-neutral-800 focus:border-indigo-500"
     />
     <button
       onclick={copyCurl}
       disabled={!req.url.trim()}
       title="Copy as cURL"
-      class="rounded border border-neutral-700 px-3 py-1.5 text-[11px] uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-300 disabled:opacity-40
-             {curlFlash === 'copied' ? 'text-emerald-400' : curlFlash === 'error' ? 'text-red-400' : 'text-neutral-300'}"
+      class="rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium uppercase tracking-wide hover:border-indigo-500 hover:text-indigo-200 disabled:opacity-40
+             {curlFlash === 'copied' ? 'text-emerald-300' : curlFlash === 'error' ? 'text-red-300' : 'text-neutral-200'}"
     >
       {curlFlash === "copied" ? "Copied" : curlFlash === "error" ? "Failed" : "cURL"}
     </button>
     <button
       onclick={handleSaveClick}
-      class="rounded border border-neutral-700 px-3 py-1.5 text-[11px] uppercase tracking-widest text-neutral-300 hover:border-indigo-500 hover:text-indigo-300"
+      class="rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-200 hover:border-indigo-500 hover:text-indigo-200"
     >
       Save
     </button>
@@ -222,7 +222,7 @@
   <div class="flex items-center gap-2 border-b border-neutral-800 p-2">
     <select
       bind:value={req.method}
-      class="rounded border border-neutral-700 bg-neutral-950 px-2 py-1.5 text-xs font-semibold outline-none focus:border-indigo-500"
+      class="rounded border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-sm font-semibold text-neutral-50 outline-none focus:border-indigo-500"
     >
       {#each methods as m (m)}
         <option value={m}>{m}</option>
@@ -234,63 +234,63 @@
       onkeydown={onKey}
       type="text"
       placeholder="https://api.example.com/users"
-      class="flex-1 rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 outline-none placeholder:text-neutral-600 focus:border-indigo-500"
+      class="flex-1 rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-[15px] text-neutral-50 outline-none placeholder:text-neutral-500 focus:border-indigo-500"
     />
 
     <button
       onclick={send}
       disabled={loading || !req.url.trim()}
-      class="rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+      class="rounded bg-indigo-600 px-4 py-1.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {loading ? "…" : "Send"}
     </button>
   </div>
 
   {#if resolvedUrl}
-    <div class="border-b border-neutral-800 bg-neutral-950/40 px-3 py-1 text-[10px] text-neutral-500">
-      <span class="uppercase tracking-widest text-neutral-600">→</span>
-      <span class="ml-1 font-mono text-neutral-400">{resolvedUrl}</span>
+    <div class="border-b border-neutral-800 bg-neutral-950/50 px-3 py-1.5 text-xs text-neutral-400">
+      <span class="uppercase tracking-wide text-neutral-500">→</span>
+      <span class="ml-1 font-mono text-neutral-300">{resolvedUrl}</span>
     </div>
   {/if}
 
   {#if showSaveDialog}
     <div class="flex flex-col gap-2 border-b border-neutral-800 bg-neutral-950/60 p-3">
-      <div class="text-[10px] uppercase tracking-widest text-neutral-500">
+      <div class="text-xs uppercase tracking-wide text-neutral-400">
         Save request to workspace
       </div>
       <div class="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2">
         <label class="flex flex-col gap-1">
-          <span class="text-[10px] uppercase tracking-widest text-neutral-500">Collection</span>
+          <span class="text-xs uppercase tracking-wide text-neutral-400">Collection</span>
           <input
             bind:value={saveCollection}
             placeholder="users"
-            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs outline-none focus:border-indigo-500"
+            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
           />
         </label>
         <label class="flex flex-col gap-1">
-          <span class="text-[10px] uppercase tracking-widest text-neutral-500">Slug</span>
+          <span class="text-xs uppercase tracking-wide text-neutral-400">Slug</span>
           <input
             bind:value={saveSlug}
             placeholder="get-users"
-            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-xs outline-none focus:border-indigo-500"
+            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
           />
         </label>
         <button
           onclick={confirmSave}
           disabled={!saveCollection.trim() || !saveSlug.trim()}
-          class="self-end rounded bg-indigo-600 px-3 py-1.5 text-[11px] uppercase tracking-widest text-white hover:bg-indigo-500 disabled:opacity-40"
+          class="self-end rounded bg-indigo-600 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-white hover:bg-indigo-500 disabled:opacity-40"
         >
           Save
         </button>
         <button
           onclick={() => (showSaveDialog = false)}
-          class="self-end rounded border border-neutral-800 px-3 py-1.5 text-[11px] uppercase tracking-widest text-neutral-400 hover:border-neutral-700 hover:text-neutral-200"
+          class="self-end rounded border border-neutral-800 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-300 hover:border-neutral-700 hover:text-neutral-100"
         >
           Cancel
         </button>
       </div>
       {#if saveError}
-        <div class="text-[11px] text-red-400">{saveError}</div>
+        <div class="text-xs text-red-300">{saveError}</div>
       {/if}
     </div>
   {/if}
@@ -299,10 +299,10 @@
     {#each tabs as tab (tab.id)}
       <button
         onclick={() => (activeTab = tab.id)}
-        class="flex items-center gap-1.5 border-b-2 px-3 py-1.5 text-[11px] uppercase tracking-widest
+        class="flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium uppercase tracking-wide
                {activeTab === tab.id
                  ? 'border-indigo-500 text-neutral-100'
-                 : 'border-transparent text-neutral-500 hover:text-neutral-300'}"
+                 : 'border-transparent text-neutral-400 hover:text-neutral-200'}"
       >
         {tab.label}
         {#if hasBadge(tab.id)}
@@ -329,4 +329,4 @@
   </div>
 </section>
 
-<p class="mt-1 text-[10px] text-neutral-600">⌘⏎ to send</p>
+<p class="mt-1 text-xs text-neutral-500">⌘⏎ to send</p>
