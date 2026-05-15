@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Compose, Method, RequestDefinition, ResponseDto } from "./api";
-  import { sendRequest } from "./api";
+  import { exportCurl, sendRequest } from "./api";
   import { workspace } from "./workspaceStore.svelte";
   import KeyValueTable from "./KeyValueTable.svelte";
   import AuthPane from "./AuthPane.svelte";
@@ -29,6 +29,21 @@
   }: Props = $props();
 
   const methods: Method[] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+
+  // Mirror of stubhouse_core::interpolate_string for {{key}} preview only.
+  // Builtins ($timestamp, $randomUUID, $env.*) are intentionally left as-is.
+  function interpolate(s: string, vars: Record<string, string>): string {
+    return s.replace(/\{\{\s*([^}]+?)\s*\}\}/g, (whole, key) =>
+      key.startsWith("$") || !(key in vars) ? whole : vars[key],
+    );
+  }
+
+  const resolvedUrl = $derived.by(() => {
+    const vars = workspace.activeEnv?.variables ?? {};
+    if (!req.url.includes("{{")) return null;
+    const out = interpolate(req.url, vars);
+    return out === req.url ? null : out;
+  });
 
   type Tab = "params" | "headers" | "auth" | "body";
   const tabs: Array<{ id: Tab; label: string }> = [
@@ -117,6 +132,20 @@
   let saveSlug = $state("");
   let saveError = $state<string | null>(null);
 
+  let curlFlash = $state<"idle" | "copied" | "error">("idle");
+
+  async function copyCurl() {
+    try {
+      const snippet = await exportCurl({ ...req, url: req.url.trim() });
+      await navigator.clipboard.writeText(snippet);
+      curlFlash = "copied";
+    } catch (e) {
+      curlFlash = "error";
+      onError(typeof e === "string" ? e : String(e));
+    }
+    setTimeout(() => (curlFlash = "idle"), 1500);
+  }
+
   function slugify(s: string): string {
     return s
       .trim()
@@ -174,6 +203,15 @@
       class="flex-1 rounded border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-neutral-100 outline-none hover:border-neutral-800 focus:border-indigo-500"
     />
     <button
+      onclick={copyCurl}
+      disabled={!req.url.trim()}
+      title="Copy as cURL"
+      class="rounded border border-neutral-700 px-3 py-1.5 text-[11px] uppercase tracking-widest hover:border-indigo-500 hover:text-indigo-300 disabled:opacity-40
+             {curlFlash === 'copied' ? 'text-emerald-400' : curlFlash === 'error' ? 'text-red-400' : 'text-neutral-300'}"
+    >
+      {curlFlash === "copied" ? "Copied" : curlFlash === "error" ? "Failed" : "cURL"}
+    </button>
+    <button
       onclick={handleSaveClick}
       class="rounded border border-neutral-700 px-3 py-1.5 text-[11px] uppercase tracking-widest text-neutral-300 hover:border-indigo-500 hover:text-indigo-300"
     >
@@ -207,6 +245,13 @@
       {loading ? "…" : "Send"}
     </button>
   </div>
+
+  {#if resolvedUrl}
+    <div class="border-b border-neutral-800 bg-neutral-950/40 px-3 py-1 text-[10px] text-neutral-500">
+      <span class="uppercase tracking-widest text-neutral-600">→</span>
+      <span class="ml-1 font-mono text-neutral-400">{resolvedUrl}</span>
+    </div>
+  {/if}
 
   {#if showSaveDialog}
     <div class="flex flex-col gap-2 border-b border-neutral-800 bg-neutral-950/60 p-3">

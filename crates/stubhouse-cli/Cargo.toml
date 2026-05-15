@@ -12,3 +12,6 @@ path = "src/main.rs"
 
 [dependencies]
 stubhouse-core.workspace = true
+clap = { version = "4", features = ["derive"] }
+serde_yaml.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }

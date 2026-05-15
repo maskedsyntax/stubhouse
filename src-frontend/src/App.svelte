@@ -50,14 +50,65 @@
     error = null;
     workspace.refreshHistory();
   }
+
+  // Stable color per env name — derived from string hash.
+  function envColor(name: string): string {
+    let h = 0;
+    for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) | 0;
+    const palette = [
+      "bg-emerald-500",
+      "bg-sky-500",
+      "bg-amber-500",
+      "bg-fuchsia-500",
+      "bg-rose-500",
+      "bg-violet-500",
+      "bg-teal-500",
+    ];
+    return palette[Math.abs(h) % palette.length];
+  }
+
+  async function onEnvChange(e: Event) {
+    const value = (e.currentTarget as HTMLSelectElement).value;
+    if (value === "") {
+      await workspace.deactivate();
+    } else {
+      await workspace.activate(value);
+    }
+  }
 </script>
 
 <main class="flex h-full">
   <Sidebar onLoad={loadDef} onReplay={loadReplay} />
 
   <div class="flex flex-1 flex-col">
-    <header class="border-b border-neutral-800 px-4 py-2 text-xs uppercase tracking-widest text-neutral-500">
-      StubHouse <span class="text-neutral-700">·</span> <span class="text-neutral-400">Phase 1 slice C</span>
+    <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-2">
+      <div class="text-xs uppercase tracking-widest text-neutral-500">
+        StubHouse <span class="text-neutral-700">·</span>
+        <span class="text-neutral-400">Phase 1 slice C</span>
+      </div>
+
+      {#if workspace.info}
+        <label class="flex items-center gap-2 text-[11px] text-neutral-400">
+          <span class="uppercase tracking-widest text-neutral-600">env</span>
+          {#if workspace.activeEnv}
+            <span class="inline-block h-2 w-2 rounded-full {envColor(workspace.activeEnv.name)}"></span>
+          {:else}
+            <span class="inline-block h-2 w-2 rounded-full bg-neutral-700"></span>
+          {/if}
+          <select
+            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1 text-[11px] text-neutral-200 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
+            value={workspace.activeEnv?.name ?? ""}
+            onchange={onEnvChange}
+            disabled={workspace.envs.length === 0}
+            title={workspace.envs.length === 0 ? "No environments — add files under .stubhouse/environments/" : "Active environment"}
+          >
+            <option value="">— none —</option>
+            {#each workspace.envs as env (env.name)}
+              <option value={env.name}>{env.name}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
     </header>
 
     <div class="flex flex-1 flex-col gap-4 overflow-auto p-4">

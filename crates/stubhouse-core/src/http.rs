@@ -100,7 +100,13 @@ pub async fn send(req: Request) -> Result<Response, RequestError> {
     let elapsed_ms = started.elapsed().as_millis() as u64;
     let size_bytes = body.len();
 
-    Ok(Response { status, headers, body, elapsed_ms, size_bytes })
+    Ok(Response {
+        status,
+        headers,
+        body,
+        elapsed_ms,
+        size_bytes,
+    })
 }
 
 mod bytes_as_base64 {
@@ -113,7 +119,10 @@ mod bytes_as_base64 {
     }
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Bytes, D::Error> {
         let s = String::deserialize(d)?;
-        STANDARD.decode(&s).map(Bytes::from).map_err(serde::de::Error::custom)
+        STANDARD
+            .decode(&s)
+            .map(Bytes::from)
+            .map_err(serde::de::Error::custom)
     }
 }
 
@@ -172,7 +181,9 @@ mod tests {
         assert_eq!(resp.body.as_ref(), b"hi");
         assert_eq!(resp.size_bytes, 2);
         assert!(
-            resp.headers.iter().any(|(k, v)| k.eq_ignore_ascii_case("x-test") && v == "yes"),
+            resp.headers
+                .iter()
+                .any(|(k, v)| k.eq_ignore_ascii_case("x-test") && v == "yes"),
             "expected x-test header in {:?}",
             resp.headers
         );

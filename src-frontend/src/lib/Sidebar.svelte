@@ -33,6 +33,16 @@
     await workspace.pickAndOpen();
   }
 
+  let importFlash = $state<string | null>(null);
+
+  async function importPostmanFile() {
+    const summary = await workspace.pickAndImportPostman();
+    if (summary) {
+      importFlash = `Imported ${summary.imported} request${summary.imported === 1 ? "" : "s"}`;
+      setTimeout(() => (importFlash = null), 2500);
+    }
+  }
+
   async function confirmClear() {
     if (confirm("Clear all request history for this workspace?")) {
       await workspace.wipeHistory();
@@ -69,14 +79,31 @@
         <div class="text-[11px] text-neutral-500">No workspace open</div>
       {/if}
     </div>
-    <button
-      onclick={pickWorkspace}
-      title="Open workspace…"
-      class="ml-2 rounded border border-neutral-800 px-2 py-1 text-[10px] uppercase tracking-widest text-neutral-400 hover:border-indigo-600 hover:text-indigo-400"
-    >
-      Open
-    </button>
+    <div class="ml-2 flex gap-1">
+      {#if workspace.info}
+        <button
+          onclick={importPostmanFile}
+          title="Import Postman v2.1 collection (.json)"
+          class="rounded border border-neutral-800 px-2 py-1 text-[10px] uppercase tracking-widest text-neutral-400 hover:border-indigo-600 hover:text-indigo-400"
+        >
+          Import
+        </button>
+      {/if}
+      <button
+        onclick={pickWorkspace}
+        title="Open workspace…"
+        class="rounded border border-neutral-800 px-2 py-1 text-[10px] uppercase tracking-widest text-neutral-400 hover:border-indigo-600 hover:text-indigo-400"
+      >
+        Open
+      </button>
+    </div>
   </div>
+
+  {#if importFlash}
+    <div class="border-b border-neutral-800 bg-emerald-950/40 px-3 py-1 text-[10px] text-emerald-300">
+      {importFlash}
+    </div>
+  {/if}
 
   <div class="flex-1 overflow-y-auto">
     {#if workspace.error}

@@ -78,7 +78,10 @@ impl History {
         let path = dir.join(HISTORY_DB);
         let conn = Connection::open(&path)?;
         conn.execute_batch(SCHEMA)?;
-        Ok(Self { path, conn: Mutex::new(conn) })
+        Ok(Self {
+            path,
+            conn: Mutex::new(conn),
+        })
     }
 
     pub fn path(&self) -> &Path {
@@ -164,7 +167,11 @@ impl History {
             elapsed_ms: entry.elapsed_ms,
             size_bytes: entry.size_bytes,
         };
-        Ok(HistoryRecord { entry, request, response })
+        Ok(HistoryRecord {
+            entry,
+            request,
+            response,
+        })
     }
 
     pub fn clear(&self) -> Result<usize, HistoryError> {
@@ -207,7 +214,9 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let h = History::open(dir.path()).unwrap();
 
-        let id = h.record(&sample_compose(), &sample_response(b"{\"ok\":true}")).unwrap();
+        let id = h
+            .record(&sample_compose(), &sample_response(b"{\"ok\":true}"))
+            .unwrap();
         assert!(id > 0);
 
         let entries = h.list(50).unwrap();

@@ -103,3 +103,42 @@ export async function loadHistory(id: number): Promise<HistoryReplay> {
 export async function clearHistory(): Promise<number> {
   return await invoke<number>("clear_history");
 }
+
+export interface EnvironmentEntry {
+  name: string;
+  file: string;
+}
+
+export interface ActiveEnvironment {
+  name: string;
+  variables: Record<string, string>;
+}
+
+export async function listEnvs(): Promise<EnvironmentEntry[]> {
+  return await invoke<EnvironmentEntry[]>("list_envs");
+}
+
+export async function activateEnv(name: string): Promise<ActiveEnvironment> {
+  return await invoke<ActiveEnvironment>("activate_env", { name });
+}
+
+export async function deactivateEnv(): Promise<void> {
+  await invoke<void>("deactivate_env");
+}
+
+export async function getActiveEnv(): Promise<ActiveEnvironment | null> {
+  return await invoke<ActiveEnvironment | null>("active_env");
+}
+
+export async function exportCurl(req: Compose): Promise<string> {
+  return await invoke<string>("export_curl", { req });
+}
+
+export interface ImportSummary {
+  imported: number;
+  collections: string[];
+}
+
+export async function importPostman(path: string): Promise<ImportSummary> {
+  return await invoke<ImportSummary>("import_postman", { path });
+}

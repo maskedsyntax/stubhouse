@@ -8,8 +8,13 @@ use crate::http::{Method, Request};
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum Auth {
     None,
-    Bearer { token: String },
-    Basic { username: String, password: String },
+    Bearer {
+        token: String,
+    },
+    Basic {
+        username: String,
+        password: String,
+    },
     ApiKey {
         #[serde(rename = "in")]
         location: ApiKeyLocation,
@@ -48,8 +53,12 @@ pub struct Compose {
     pub body: Body,
 }
 
-fn default_auth() -> Auth { Auth::None }
-fn default_body() -> Body { Body::None }
+fn default_auth() -> Auth {
+    Auth::None
+}
+fn default_body() -> Body {
+    Body::None
+}
 
 #[derive(Debug, Error)]
 pub enum ComposeError {
@@ -61,10 +70,17 @@ pub enum ComposeError {
 
 impl Compose {
     pub fn build(self) -> Result<Request, ComposeError> {
-        let Compose { method, url, query, mut headers, auth, body } = self;
+        let Compose {
+            method,
+            url,
+            query,
+            mut headers,
+            auth,
+            body,
+        } = self;
 
-        let mut parsed = url::Url::parse(&url)
-            .map_err(|e| ComposeError::InvalidUrl(e.to_string()))?;
+        let mut parsed =
+            url::Url::parse(&url).map_err(|e| ComposeError::InvalidUrl(e.to_string()))?;
 
         for (k, v) in query {
             if !k.is_empty() {
@@ -82,7 +98,11 @@ impl Compose {
                 let creds = STANDARD.encode(format!("{username}:{password}"));
                 headers.push(("Authorization".into(), format!("Basic {creds}")));
             }
-            Auth::ApiKey { location, name, value } => match location {
+            Auth::ApiKey {
+                location,
+                name,
+                value,
+            } => match location {
                 ApiKeyLocation::Header => {
                     headers.push((name, value));
                 }
@@ -94,16 +114,18 @@ impl Compose {
 
         let (body_bytes, body_ct) = match body {
             Body::None => (None, None),
-            Body::Text { content_type, text } => (
-                Some(Bytes::from(text.into_bytes())),
-                Some(content_type),
-            ),
+            Body::Text { content_type, text } => {
+                (Some(Bytes::from(text.into_bytes())), Some(content_type))
+            }
             Body::Json { text } => {
                 if !text.trim().is_empty() {
                     serde_json::from_str::<serde_json::Value>(&text)
                         .map_err(|e| ComposeError::InvalidJson(e.to_string()))?;
                 }
-                (Some(Bytes::from(text.into_bytes())), Some("application/json".into()))
+                (
+                    Some(Bytes::from(text.into_bytes())),
+                    Some("application/json".into()),
+                )
             }
             Body::Form { fields } => {
                 let encoded = serde_urlencoded::to_string(&fields)
@@ -116,7 +138,9 @@ impl Compose {
         };
 
         if let Some(ct) = body_ct {
-            let already = headers.iter().any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
+            let already = headers
+                .iter()
+                .any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
             if !already {
                 headers.push(("Content-Type".into(), ct));
             }
@@ -149,28 +173,52 @@ mod tests {
     #[test]
     fn appends_query_params() {
         let req = Compose {
-            query: vec![("q".into(), "hello world".into()), ("page".into(), "2".into())],
+            query: vec![
+                ("q".into(), "hello world".into()),
+                ("page".into(), "2".into()),
+            ],
             ..base()
-        }.build().unwrap();
+        }
+        .build()
+        .unwrap();
         assert!(req.url.contains("q=hello+world") || req.url.contains("q=hello%20world"));
         assert!(req.url.contains("page=2"));
     }
 
     #[test]
     fn bearer_auth_adds_authorization_header() {
-        let req = Compose { auth: Auth::Bearer { token: "abc.def".into() }, ..base() }
-            .build().unwrap();
-        let h = req.headers.iter().find(|(k, _)| k == "Authorization").unwrap();
+        let req = Compose {
+            auth: Auth::Bearer {
+                token: "abc.def".into(),
+            },
+            ..base()
+        }
+        .build()
+        .unwrap();
+        let h = req
+            .headers
+            .iter()
+            .find(|(k, _)| k == "Authorization")
+            .unwrap();
         assert_eq!(h.1, "Bearer abc.def");
     }
 
     #[test]
     fn basic_auth_base64_encodes_credentials() {
         let req = Compose {
-            auth: Auth::Basic { username: "alice".into(), password: "s3cret".into() },
+            auth: Auth::Basic {
+                username: "alice".into(),
+                password: "s3cret".into(),
+            },
             ..base()
-        }.build().unwrap();
-        let h = req.headers.iter().find(|(k, _)| k == "Authorization").unwrap();
+        }
+        .build()
+        .unwrap();
+        let h = req
+            .headers
+            .iter()
+            .find(|(k, _)| k == "Authorization")
+            .unwrap();
         assert_eq!(h.1, "Basic YWxpY2U6czNjcmV0");
     }
 
@@ -183,8 +231,13 @@ mod tests {
                 value: "kkk".into(),
             },
             ..base()
-        }.build().unwrap();
-        assert!(req.headers.iter().any(|(k, v)| k == "X-Api-Key" && v == "kkk"));
+        }
+        .build()
+        .unwrap();
+        assert!(req
+            .headers
+            .iter()
+            .any(|(k, v)| k == "X-Api-Key" && v == "kkk"));
     }
 
     #[test]
@@ -196,7 +249,9 @@ mod tests {
                 value: "kkk".into(),
             },
             ..base()
-        }.build().unwrap();
+        }
+        .build()
+        .unwrap();
         assert!(req.url.contains("key=kkk"));
     }
 
@@ -204,11 +259,19 @@ mod tests {
     fn json_body_sets_content_type_and_validates() {
         let req = Compose {
             method: Method::Post,
-            body: Body::Json { text: r#"{"a":1}"#.into() },
+            body: Body::Json {
+                text: r#"{"a":1}"#.into(),
+            },
             ..base()
-        }.build().unwrap();
+        }
+        .build()
+        .unwrap();
         assert_eq!(req.body.as_deref(), Some(br#"{"a":1}"#.as_ref()));
-        let ct = req.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("content-type")).unwrap();
+        let ct = req
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+            .unwrap();
         assert_eq!(ct.1, "application/json");
     }
 
@@ -216,9 +279,13 @@ mod tests {
     fn invalid_json_body_errors() {
         let err = Compose {
             method: Method::Post,
-            body: Body::Json { text: "not json".into() },
+            body: Body::Json {
+                text: "not json".into(),
+            },
             ..base()
-        }.build().unwrap_err();
+        }
+        .build()
+        .unwrap_err();
         matches!(err, ComposeError::InvalidJson(_));
     }
 
@@ -230,9 +297,15 @@ mod tests {
                 fields: vec![("a".into(), "1".into()), ("b".into(), "hello world".into())],
             },
             ..base()
-        }.build().unwrap();
+        }
+        .build()
+        .unwrap();
         assert_eq!(req.body.as_deref(), Some(b"a=1&b=hello+world".as_ref()));
-        let ct = req.headers.iter().find(|(k, _)| k.eq_ignore_ascii_case("content-type")).unwrap();
+        let ct = req
+            .headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+            .unwrap();
         assert_eq!(ct.1, "application/x-www-form-urlencoded");
     }
 
@@ -241,9 +314,13 @@ mod tests {
         let req = Compose {
             method: Method::Post,
             headers: vec![("content-type".into(), "application/vnd.custom+json".into())],
-            body: Body::Json { text: r#"{"a":1}"#.into() },
+            body: Body::Json {
+                text: r#"{"a":1}"#.into(),
+            },
             ..base()
-        }.build().unwrap();
+        }
+        .build()
+        .unwrap();
         let cts: Vec<_> = req
             .headers
             .iter()
@@ -255,7 +332,12 @@ mod tests {
 
     #[test]
     fn invalid_url_errors() {
-        let err = Compose { url: "not a url".into(), ..base() }.build().unwrap_err();
+        let err = Compose {
+            url: "not a url".into(),
+            ..base()
+        }
+        .build()
+        .unwrap_err();
         matches!(err, ComposeError::InvalidUrl(_));
     }
 }
