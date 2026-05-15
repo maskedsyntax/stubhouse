@@ -322,7 +322,19 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
     <p class="body-lg prose-width fade-up stagger-2">
       A direct comparison with the tools you already know. We ship the embedded mock as part of the product, not as an upsell.
     </p>
-    <div class="fade-up stagger-3">
+    <div class="compare-mobile fade-up stagger-3">
+      <div class="compare-mobile__panel">
+        <p class="mono compare-mobile__kicker">StubHouse vs Postman, Insomnia, Bruno, and Yaak</p>
+        <p class="caption compare-mobile__copy">
+          Local-first workspaces, files on disk, native app shell, and the mock server roadmap in one focused table.
+        </p>
+        <Button href="/compare" variant="secondary" size="md" class="compare-mobile__button">
+          Compare with other apps
+          {#snippet trailing()}<ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />{/snippet}
+        </Button>
+      </div>
+    </div>
+    <div class="compare-desktop fade-up stagger-3">
       <Comparison />
     </div>
   </div>
@@ -836,6 +848,46 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
   .ci-kicker {
     font-size: inherit;
     letter-spacing: 0;
+  }
+
+  .compare-mobile {
+    display: none;
+  }
+
+  .compare-desktop {
+    display: block;
+  }
+
+  .compare-mobile__panel {
+    margin-top: 28px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background:
+      linear-gradient(to bottom, color-mix(in srgb, var(--bg-surface-2) 36%, transparent), transparent),
+      var(--bg-surface);
+    padding: 16px;
+  }
+
+  .compare-mobile__kicker {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .compare-mobile__copy {
+    margin: 10px 0 16px;
+    max-width: 38ch;
+  }
+
+  @media (max-width: 639px) {
+    .compare-mobile {
+      display: block;
+    }
+
+    .compare-desktop {
+      display: none;
+    }
   }
 
   .chart__row {
