@@ -1,14 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    Arc, Mutex,
+};
 
 use serde::Serialize;
 use stubhouse_core::{
     from_postman_v21, interpolate_compose, list_environments, load_environment,
     mock::{
         activate_scenario, list_scenarios, load_rules,
-        server::{run as run_mock_server, MockLog},
+        server::{run_with_hot_reload, MockLog, MockReload},
         ScenarioActivation, ScenarioEntry,
     },
     save_environment, send, to_curl, Compose, Environment, EnvironmentEntry, EnvironmentFile,
@@ -27,7 +30,7 @@ struct AppState {
 struct MockServerRuntime {
     bind: String,
     port: u16,
-    rules: usize,
+    rules: Arc<AtomicUsize>,
     logs: Arc<Mutex<Vec<MockLog>>>,
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -242,9 +245,30 @@ async fn start_mock_server(
     });
 
     let rule_count = rules.len();
+    let live_rule_count = Arc::new(AtomicUsize::new(rule_count));
+    let reload_rule_count = Arc::clone(&live_rule_count);
+    let reload_fn: Arc<dyn Fn(MockReload) + Send + Sync> = Arc::new(move |reload| {
+        if reload.error.is_none() {
+            reload_rule_count.store(reload.rules, Ordering::Relaxed);
+        } else if let Some(error) = reload.error {
+            eprintln!(
+                "stubhouse mock reload failed; keeping {} rule(s): {error}",
+                reload.rules
+            );
+        }
+    });
     let (tx, rx) = tokio::sync::oneshot::channel();
+    let root_for_server = root.clone();
     tokio::spawn(async move {
-        if let Err(e) = run_mock_server(rules, addr, Some(rx), Some(log_fn)).await {
+        if let Err(e) = run_with_hot_reload(
+            root_for_server,
+            addr,
+            Some(rx),
+            Some(log_fn),
+            Some(reload_fn),
+        )
+        .await
+        {
             eprintln!("stubhouse mock server stopped: {e}");
         }
     });
@@ -252,7 +276,7 @@ async fn start_mock_server(
     let runtime = MockServerRuntime {
         bind,
         port,
-        rules: rule_count,
+        rules: live_rule_count,
         logs,
         shutdown: Some(tx),
     };
@@ -292,7 +316,7 @@ fn mock_status_from_runtime(runtime: &MockServerRuntime) -> MockServerStatus {
         bind: runtime.bind.clone(),
         port: runtime.port,
         url: format!("http://{}:{}", runtime.bind, runtime.port),
-        rules: runtime.rules,
+        rules: runtime.rules.load(Ordering::Relaxed),
         logs,
     }
 }

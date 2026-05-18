@@ -39,10 +39,10 @@ Top of list is "do next". Mark with `[x]` when done.
   - [x] CLI: `stubhouse scenario list` / `stubhouse scenario activate <name>`
   - [x] UI dropdown
 - [x] Mock server panel in UI: on/off toggle, port picker, live request log
-- [ ] Hot reload: watch `.stubhouse/collections/**/mocks/*.yaml` for changes
-- [ ] Control API at `/__mirage/*` (status, scenario, reset, rules, log)
-- [ ] Fault injection: `timeout`, `slow_response`, `connection_reset`, `partial_body`, `random_5xx`
-- [ ] Request passthrough (selective proxying to real upstream)
+- [x] Hot reload: watch `.stubhouse/collections/**/mocks/*.yaml` for changes
+- [x] Control API at `/__mirage/*` (status, scenario, reset, rules, log)
+- [x] Fault injection: `timeout`, `slow_response`, `connection_reset`, `partial_body`, `random_5xx`
+- [x] Request passthrough (selective proxying to real upstream)
 - [x] `stubhouse serve` CLI command (headless)
 
 **Phase 2 exit criteria:** `stubhouse serve .` gives a frontend developer a fully functional mock API with scenario switching, no real backend needed.

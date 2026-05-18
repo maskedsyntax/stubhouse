@@ -6,7 +6,10 @@ use std::sync::Arc;
 use clap::{Parser, Subcommand};
 use stubhouse_core::{
     from_postman_v21, interpolate_compose, list_environments, load_environment,
-    mock::{activate_scenario, list_scenarios, load_rules, server::run as run_mock_server},
+    mock::{
+        activate_scenario, list_scenarios, load_rules,
+        server::{run_with_hot_reload, MockReload},
+    },
     to_curl, Workspace,
 };
 
@@ -191,10 +194,22 @@ fn serve(root: &std::path::Path, bind: &str, port: u16) -> Result<(), String> {
                     log.matched_rule.as_deref().unwrap_or("(no match)"),
                 );
             });
+        let reload_fn: Arc<dyn Fn(MockReload) + Send + Sync> = Arc::new(|reload| {
+            if let Some(error) = reload.error {
+                eprintln!(
+                    "stubhouse mock reload failed; keeping {} rule(s): {error}",
+                    reload.rules
+                );
+            } else {
+                eprintln!("stubhouse mock reloaded: {} rule(s)", reload.rules);
+            }
+        });
 
         let (tx, rx) = tokio::sync::oneshot::channel();
-        let server =
-            tokio::spawn(async move { run_mock_server(rules, addr, Some(rx), Some(log_fn)).await });
+        let root = root.to_path_buf();
+        let server = tokio::spawn(async move {
+            run_with_hot_reload(root, addr, Some(rx), Some(log_fn), Some(reload_fn)).await
+        });
 
         // Graceful shutdown on Ctrl-C.
         if tokio::signal::ctrl_c().await.is_ok() {

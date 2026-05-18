@@ -149,6 +149,9 @@ mod tests {
                 delay_ms: 0,
             },
             scenarios: vec![],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
         }
     }
 

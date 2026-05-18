@@ -1,22 +1,31 @@
 //! Embedded HTTP server that serves mock rules.
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
 use bytes::Bytes;
-use http_body_util::Full;
-use hyper::body::Incoming;
+use http_body_util::{combinators::BoxBody, BodyExt, Full};
+use hyper::body::{Body as HyperBody, Frame, Incoming, SizeHint};
 use hyper::server::conn::http1;
 use hyper::service::service_fn;
 use hyper::{Request, Response};
 use hyper_util::rt::TokioIo;
 use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::sync::{oneshot, RwLock};
 
 use super::matcher::{find_match, Match};
-use super::{render_body, MockBody, MockError, MockRule};
+use super::{
+    load_rules, render_body, MockBody, MockError, MockFault, MockFaultKind, MockRule,
+    ScenarioActivation,
+};
 use crate::http::Method;
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+type MockResponseBody = BoxBody<Bytes, BoxError>;
 
 /// Wire-format payload for the server's request log channel.
 #[derive(Debug, Clone, serde::Serialize)]
@@ -27,6 +36,19 @@ pub struct MockLog {
     pub status: u16,
 }
 
+/// Rule reload event emitted by the hot-reload server.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MockReload {
+    pub rules: usize,
+    pub error: Option<String>,
+}
+
+#[derive(Clone)]
+struct ServerState {
+    rules: Arc<RwLock<Vec<MockRule>>>,
+    logs: Arc<RwLock<Vec<MockLog>>>,
+}
+
 /// Run the mock server in the foreground, until ctrl-c (or `shutdown_rx` fires).
 /// On bind error, returns immediately.
 pub async fn run(
@@ -35,18 +57,54 @@ pub async fn run(
     shutdown_rx: Option<oneshot::Receiver<()>>,
     on_log: Option<Arc<dyn Fn(MockLog) + Send + Sync>>,
 ) -> Result<(), MockError> {
+    run_dynamic(ServerState::new(rules), addr, shutdown_rx, on_log, None).await
+}
+
+/// Run the mock server and reload `collections/*/mocks/*.yaml` from disk when
+/// their parsed rule set changes. Invalid edits keep the last good rules active.
+pub async fn run_with_hot_reload(
+    workspace_root: PathBuf,
+    addr: SocketAddr,
+    shutdown_rx: Option<oneshot::Receiver<()>>,
+    on_log: Option<Arc<dyn Fn(MockLog) + Send + Sync>>,
+    on_reload: Option<Arc<dyn Fn(MockReload) + Send + Sync>>,
+) -> Result<(), MockError> {
+    let state = ServerState::new(load_rules(&workspace_root)?);
+    run_dynamic(
+        state,
+        addr,
+        shutdown_rx,
+        on_log,
+        Some((workspace_root, on_reload)),
+    )
+    .await
+}
+
+async fn run_dynamic(
+    state: ServerState,
+    addr: SocketAddr,
+    shutdown_rx: Option<oneshot::Receiver<()>>,
+    on_log: Option<Arc<dyn Fn(MockLog) + Send + Sync>>,
+    reload: Option<(PathBuf, Option<Arc<dyn Fn(MockReload) + Send + Sync>>)>,
+) -> Result<(), MockError> {
     let listener = TcpListener::bind(addr)
         .await
         .map_err(|e| MockError::Server(format!("bind {addr}: {e}")))?;
 
-    let rules = Arc::new(rules);
     let log = on_log.unwrap_or_else(|| Arc::new(|_| {}));
+    let mut reload_tick = tokio::time::interval(Duration::from_millis(500));
 
     let mut shutdown = shutdown_rx;
     loop {
         let accept = listener.accept();
         let conn = tokio::select! {
             res = accept => res,
+            _ = reload_tick.tick(), if reload.is_some() => {
+                if let Some((workspace_root, on_reload)) = &reload {
+                    reload_rules(workspace_root, &state.rules, on_reload).await;
+                }
+                continue;
+            }
             _ = wait_shutdown(&mut shutdown) => return Ok(()),
         };
 
@@ -58,19 +116,58 @@ pub async fn run(
             }
         };
 
-        let rules = Arc::clone(&rules);
+        let state = state.clone();
         let log = Arc::clone(&log);
         tokio::spawn(async move {
             let io = TokioIo::new(stream);
             let svc = service_fn(move |req| {
-                let rules = Arc::clone(&rules);
+                let state = state.clone();
                 let log = Arc::clone(&log);
-                async move { Ok::<_, std::convert::Infallible>(handle(rules, req, log).await) }
+                async move { handle(state, req, log).await }
             });
             if let Err(e) = http1::Builder::new().serve_connection(io, svc).await {
                 eprintln!("stubhouse mock: connection error: {e}");
             }
         });
+    }
+}
+
+impl ServerState {
+    fn new(rules: Vec<MockRule>) -> Self {
+        Self {
+            rules: Arc::new(RwLock::new(rules)),
+            logs: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+}
+
+async fn reload_rules(
+    workspace_root: &PathBuf,
+    rules: &Arc<RwLock<Vec<MockRule>>>,
+    on_reload: &Option<Arc<dyn Fn(MockReload) + Send + Sync>>,
+) {
+    match load_rules(workspace_root) {
+        Ok(next) => {
+            let mut guard = rules.write().await;
+            if *guard != next {
+                let count = next.len();
+                *guard = next;
+                if let Some(callback) = on_reload {
+                    callback(MockReload {
+                        rules: count,
+                        error: None,
+                    });
+                }
+            }
+        }
+        Err(e) => {
+            if let Some(callback) = on_reload {
+                callback(MockReload {
+                    rules: rules.read().await.len(),
+                    error: Some(e.to_string()),
+                });
+            }
+        }
     }
 }
 
@@ -84,39 +181,106 @@ async fn wait_shutdown(rx: &mut Option<oneshot::Receiver<()>>) {
 }
 
 async fn handle(
-    rules: Arc<Vec<MockRule>>,
+    state: ServerState,
     req: Request<Incoming>,
     log: Arc<dyn Fn(MockLog) + Send + Sync>,
-) -> Response<Full<Bytes>> {
+) -> Result<Response<MockResponseBody>, std::io::Error> {
+    let path = req.uri().path().to_string();
+    let path_and_query = req
+        .uri()
+        .path_and_query()
+        .map(|value| value.as_str().to_string())
+        .unwrap_or_else(|| path.clone());
+    if path == "/__mirage" || path.starts_with("/__mirage/") {
+        return Ok(handle_control(state, req).await);
+    }
+
     let method = match map_method(req.method()) {
         Some(m) => m,
-        None => return not_supported(),
+        None => return Ok(not_supported()),
     };
-    let path = req.uri().path().to_string();
 
-    let m = find_match(&rules, method, &path);
+    let matched = {
+        let rules = state.rules.read().await;
+        find_match(&rules, method, &path).map(|Match { rule, params }| {
+            (
+                rule.name.clone(),
+                rule.active_response().clone(),
+                rule.fault.clone(),
+                rule.passthrough,
+                rule.upstream_url.clone(),
+                params,
+            )
+        })
+    };
     let (status, body_bytes, headers, matched_name): (
         u16,
         Bytes,
         Vec<(String, String)>,
         Option<String>,
-    ) = match m {
-        Some(Match { rule, params }) => {
-            let response = rule.active_response();
-            if response.delay_ms > 0 {
+    ) = match matched {
+        Some((rule_name, response, fault, passthrough, upstream_url, params)) => {
+            if passthrough {
+                return proxy_request(
+                    state,
+                    log,
+                    method,
+                    path,
+                    path_and_query,
+                    req,
+                    rule_name,
+                    upstream_url,
+                )
+                .await;
+            }
+            if let Some(fault) = &fault {
+                match fault.kind() {
+                    MockFaultKind::Timeout => {
+                        std::future::pending::<()>().await;
+                    }
+                    MockFaultKind::PartialBody => {
+                        return finish_partial_response(
+                            state, log, method, path, rule_name, &response, &params,
+                        )
+                        .await;
+                    }
+                    MockFaultKind::ConnectionReset => {
+                        let entry = MockLog {
+                            method: format!("{method:?}").to_uppercase(),
+                            path: path.clone(),
+                            matched_rule: Some(rule_name.clone()),
+                            status: 0,
+                        };
+                        record_log(&state.logs, entry.clone()).await;
+                        log(entry);
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::ConnectionReset,
+                            "stubhouse injected connection reset",
+                        ));
+                    }
+                    MockFaultKind::SlowResponse => {
+                        tokio::time::sleep(Duration::from_millis(fault.delay_ms())).await;
+                    }
+                    MockFaultKind::Random5xx if should_inject_random_5xx(fault) => {
+                        let status = random_5xx_status();
+                        return finish_response(
+                            state,
+                            log,
+                            method,
+                            path,
+                            status,
+                            Bytes::from(format!(r#"{{"error":"injected {status}"}}"#)),
+                            vec![("Content-Type".into(), "application/json".into())],
+                            Some(rule_name),
+                        )
+                        .await;
+                    }
+                    MockFaultKind::Random5xx => {}
+                }
+            } else if response.delay_ms > 0 {
                 tokio::time::sleep(Duration::from_millis(response.delay_ms)).await;
             }
-            let (body, default_ct) = render_response_body(&response.body, &params);
-            let mut headers = response.headers.clone();
-            if let Some(ct) = default_ct {
-                let already = headers
-                    .iter()
-                    .any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
-                if !already {
-                    headers.push(("Content-Type".into(), ct));
-                }
-            }
-            (response.status, body, headers, Some(rule.name.clone()))
+            response_tuple(rule_name, &response, &params).await
         }
         None => (
             404,
@@ -126,20 +290,410 @@ async fn handle(
         ),
     };
 
-    log(MockLog {
+    finish_response(
+        state,
+        log,
+        method,
+        path,
+        status,
+        body_bytes,
+        headers,
+        matched_name,
+    )
+    .await
+}
+
+async fn finish_response(
+    state: ServerState,
+    log: Arc<dyn Fn(MockLog) + Send + Sync>,
+    method: Method,
+    path: String,
+    status: u16,
+    body_bytes: Bytes,
+    headers: Vec<(String, String)>,
+    matched_name: Option<String>,
+) -> Result<Response<MockResponseBody>, std::io::Error> {
+    let entry = MockLog {
         method: format!("{method:?}").to_uppercase(),
         path: path.clone(),
         matched_rule: matched_name,
         status,
-    });
+    };
+    record_log(&state.logs, entry.clone()).await;
+    log(entry);
 
     let mut builder = Response::builder().status(status);
     for (k, v) in &headers {
         builder = builder.header(k, v);
     }
     builder
-        .body(Full::new(body_bytes))
-        .unwrap_or_else(|_| internal_error())
+        .body(full_body(body_bytes))
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+}
+
+async fn finish_partial_response(
+    state: ServerState,
+    log: Arc<dyn Fn(MockLog) + Send + Sync>,
+    method: Method,
+    path: String,
+    rule_name: String,
+    response: &super::MockResponse,
+    params: &std::collections::HashMap<String, String>,
+) -> Result<Response<MockResponseBody>, std::io::Error> {
+    let (status, body_bytes, headers, matched_name) =
+        response_tuple(rule_name, response, params).await;
+    let entry = MockLog {
+        method: format!("{method:?}").to_uppercase(),
+        path,
+        matched_rule: matched_name,
+        status,
+    };
+    record_log(&state.logs, entry.clone()).await;
+    log(entry);
+
+    let midpoint = std::cmp::max(1, body_bytes.len() / 2);
+    let partial = body_bytes.slice(..midpoint.min(body_bytes.len()));
+    let mut builder = Response::builder().status(status);
+    for (k, v) in &headers {
+        builder = builder.header(k, v);
+    }
+    builder
+        .header("Content-Length", body_bytes.len().to_string())
+        .body(PartialBody::new(partial).boxed())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))
+}
+
+fn full_body(bytes: Bytes) -> MockResponseBody {
+    Full::new(bytes).map_err(|never| match never {}).boxed()
+}
+
+async fn response_tuple(
+    rule_name: String,
+    response: &super::MockResponse,
+    params: &std::collections::HashMap<String, String>,
+) -> (u16, Bytes, Vec<(String, String)>, Option<String>) {
+    let (body, default_ct) = render_response_body(&response.body, params);
+    let mut headers = response.headers.clone();
+    if let Some(ct) = default_ct {
+        let already = headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("content-type"));
+        if !already {
+            headers.push(("Content-Type".into(), ct));
+        }
+    }
+    (response.status, body, headers, Some(rule_name))
+}
+
+fn should_inject_random_5xx(fault: &MockFault) -> bool {
+    random_fraction() < fault.probability()
+}
+
+fn random_5xx_status() -> u16 {
+    match (random_fraction() * 3.0) as u8 {
+        0 => 500,
+        1 => 502,
+        _ => 503,
+    }
+}
+
+fn random_fraction() -> f64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos())
+        .unwrap_or(0);
+    f64::from(nanos % 10_000) / 10_000.0
+}
+
+async fn proxy_request(
+    state: ServerState,
+    log: Arc<dyn Fn(MockLog) + Send + Sync>,
+    method: Method,
+    path: String,
+    path_and_query: String,
+    req: Request<Incoming>,
+    rule_name: String,
+    upstream_url: Option<String>,
+) -> Result<Response<MockResponseBody>, std::io::Error> {
+    let Some(upstream_url) = upstream_url else {
+        return finish_response(
+            state,
+            log,
+            method,
+            path,
+            502,
+            Bytes::from_static(b"{\"error\":\"passthrough rule missing upstream_url\"}"),
+            vec![("Content-Type".into(), "application/json".into())],
+            Some(rule_name),
+        )
+        .await;
+    };
+
+    let target = match passthrough_target(&upstream_url, &path_and_query) {
+        Ok(target) => target,
+        Err(e) => {
+            return finish_response(
+                state,
+                log,
+                method,
+                path,
+                502,
+                Bytes::from(format!(r#"{{"error":"invalid upstream_url: {e}"}}"#)),
+                vec![("Content-Type".into(), "application/json".into())],
+                Some(rule_name),
+            )
+            .await;
+        }
+    };
+
+    let (parts, body) = req.into_parts();
+    let body = body
+        .collect()
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+        .to_bytes();
+    let reqwest_method = reqwest::Method::from_bytes(parts.method.as_str().as_bytes())
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+    let mut builder = reqwest::Client::new()
+        .request(reqwest_method, target)
+        .body(body.to_vec());
+    for (name, value) in parts.headers.iter() {
+        if !is_hop_by_hop_header(name.as_str()) {
+            builder = builder.header(name, value);
+        }
+    }
+
+    let upstream = match builder.send().await {
+        Ok(response) => response,
+        Err(e) => {
+            return finish_response(
+                state,
+                log,
+                method,
+                path,
+                502,
+                Bytes::from(format!(r#"{{"error":"passthrough failed: {e}"}}"#)),
+                vec![("Content-Type".into(), "application/json".into())],
+                Some(rule_name),
+            )
+            .await;
+        }
+    };
+
+    let status = upstream.status().as_u16();
+    let headers = upstream
+        .headers()
+        .iter()
+        .filter(|(name, _)| !is_hop_by_hop_header(name.as_str()))
+        .filter_map(|(name, value)| {
+            value
+                .to_str()
+                .ok()
+                .map(|value| (name.as_str().to_string(), value.to_string()))
+        })
+        .collect::<Vec<_>>();
+    let body = upstream
+        .bytes()
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+
+    finish_response(
+        state,
+        log,
+        method,
+        path,
+        status,
+        body,
+        headers,
+        Some(rule_name),
+    )
+    .await
+}
+
+fn passthrough_target(upstream_url: &str, path_and_query: &str) -> Result<String, url::ParseError> {
+    let _ = url::Url::parse(upstream_url)?;
+    Ok(format!(
+        "{}/{}",
+        upstream_url.trim_end_matches('/'),
+        path_and_query.trim_start_matches('/')
+    ))
+}
+
+fn is_hop_by_hop_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "connection"
+            | "keep-alive"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "te"
+            | "trailer"
+            | "transfer-encoding"
+            | "upgrade"
+            | "host"
+            | "content-length"
+    )
+}
+
+async fn record_log(logs: &Arc<RwLock<Vec<MockLog>>>, entry: MockLog) {
+    let mut guard = logs.write().await;
+    guard.push(entry);
+    if guard.len() > 200 {
+        let overflow = guard.len() - 200;
+        guard.drain(0..overflow);
+    }
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ControlStatus {
+    ok: bool,
+    rules: usize,
+    scenarios: Vec<ControlScenario>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ControlScenario {
+    name: String,
+    rules: usize,
+    active_rules: usize,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct ScenarioSwitch {
+    scenario: Option<String>,
+    name: Option<String>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct ResetResponse {
+    ok: bool,
+    reset: bool,
+}
+
+async fn handle_control(state: ServerState, req: Request<Incoming>) -> Response<MockResponseBody> {
+    let method = req.method().clone();
+    let path = req.uri().path().to_string();
+    match (method, path.as_str()) {
+        (hyper::Method::GET, "/__mirage/status") => {
+            let rules = state.rules.read().await;
+            json_response(200, &control_status(&rules))
+        }
+        (hyper::Method::GET, "/__mirage/rules") => {
+            let rules = state.rules.read().await;
+            json_response(200, &*rules)
+        }
+        (hyper::Method::GET, "/__mirage/log") => {
+            let limit = req
+                .uri()
+                .query()
+                .and_then(|query| {
+                    query
+                        .split('&')
+                        .find_map(|part| part.strip_prefix("limit="))
+                })
+                .and_then(|value| value.parse::<usize>().ok())
+                .unwrap_or(100);
+            let logs = state.logs.read().await;
+            let start = logs.len().saturating_sub(limit);
+            json_response(200, &logs[start..])
+        }
+        (hyper::Method::POST, "/__mirage/scenario") => switch_scenario(state, req).await,
+        (hyper::Method::POST, "/__mirage/reset") => json_response(
+            200,
+            &ResetResponse {
+                ok: true,
+                reset: true,
+            },
+        ),
+        (hyper::Method::GET | hyper::Method::POST, _) => {
+            json_error(404, "unknown __mirage endpoint")
+        }
+        _ => json_error(405, "method not allowed for __mirage endpoint"),
+    }
+}
+
+async fn switch_scenario(state: ServerState, req: Request<Incoming>) -> Response<MockResponseBody> {
+    let bytes = match req.into_body().collect().await {
+        Ok(body) => body.to_bytes(),
+        Err(e) => return json_error(400, &format!("read request body: {e}")),
+    };
+    let payload: ScenarioSwitch = match serde_json::from_slice(&bytes) {
+        Ok(payload) => payload,
+        Err(e) => return json_error(400, &format!("parse json body: {e}")),
+    };
+    let Some(name) = payload.scenario.or(payload.name) else {
+        return json_error(400, "missing scenario");
+    };
+
+    let mut rules = state.rules.write().await;
+    let mut rules_changed = 0usize;
+    for rule in rules.iter_mut() {
+        if !rule.scenarios.iter().any(|scenario| scenario.name == name) {
+            continue;
+        }
+
+        let before = rule.scenarios.clone();
+        for scenario in &mut rule.scenarios {
+            scenario.active = scenario.name == name;
+        }
+        if rule.scenarios != before {
+            rules_changed += 1;
+        }
+    }
+
+    json_response(
+        200,
+        &ScenarioActivation {
+            scenario: name,
+            files_changed: 0,
+            rules_changed,
+        },
+    )
+}
+
+fn control_status(rules: &[MockRule]) -> ControlStatus {
+    let mut scenarios = std::collections::BTreeMap::<String, (usize, usize)>::new();
+    for rule in rules {
+        for scenario in &rule.scenarios {
+            let entry = scenarios.entry(scenario.name.clone()).or_default();
+            entry.0 += 1;
+            if scenario.active {
+                entry.1 += 1;
+            }
+        }
+    }
+
+    ControlStatus {
+        ok: true,
+        rules: rules.len(),
+        scenarios: scenarios
+            .into_iter()
+            .map(|(name, (rules, active_rules))| ControlScenario {
+                name,
+                rules,
+                active_rules,
+            })
+            .collect(),
+    }
+}
+
+fn json_response<T: serde::Serialize + ?Sized>(
+    status: u16,
+    value: &T,
+) -> Response<MockResponseBody> {
+    match serde_json::to_vec(value) {
+        Ok(body) => Response::builder()
+            .status(status)
+            .header("Content-Type", "application/json")
+            .body(full_body(Bytes::from(body)))
+            .unwrap_or_else(|_| internal_error()),
+        Err(_) => internal_error(),
+    }
+}
+
+fn json_error(status: u16, message: &str) -> Response<MockResponseBody> {
+    json_response(status, &serde_json::json!({ "error": message }))
 }
 
 fn render_response_body(
@@ -179,27 +733,69 @@ fn map_method(m: &hyper::Method) -> Option<Method> {
     })
 }
 
-fn not_supported() -> Response<Full<Bytes>> {
+fn not_supported() -> Response<MockResponseBody> {
     Response::builder()
         .status(405)
         .header("Content-Type", "application/json")
-        .body(Full::new(Bytes::from_static(
+        .body(full_body(Bytes::from_static(
             b"{\"error\":\"method not supported by mock server\"}",
         )))
         .unwrap()
 }
 
-fn internal_error() -> Response<Full<Bytes>> {
+fn internal_error() -> Response<MockResponseBody> {
     Response::builder()
         .status(500)
-        .body(Full::new(Bytes::from_static(b"internal error")))
+        .body(full_body(Bytes::from_static(b"internal error")))
         .unwrap()
+}
+
+struct PartialBody {
+    chunk: Option<Bytes>,
+    failed: bool,
+}
+
+impl PartialBody {
+    fn new(chunk: Bytes) -> Self {
+        Self {
+            chunk: Some(chunk),
+            failed: false,
+        }
+    }
+}
+
+impl HyperBody for PartialBody {
+    type Data = Bytes;
+    type Error = BoxError;
+
+    fn poll_frame(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        if let Some(chunk) = self.chunk.take() {
+            return Poll::Ready(Some(Ok(Frame::data(chunk))));
+        }
+        if !self.failed {
+            self.failed = true;
+            return Poll::Ready(Some(Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::ConnectionReset,
+                "stubhouse injected partial body",
+            )))));
+        }
+        Poll::Ready(None)
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        SizeHint::default()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mock::{MockBody, MockResponse};
+    use crate::mock::{MockBody, MockFaultConfig, MockFaultKind, MockResponse};
+    use std::fs;
+    use tempfile::TempDir;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn serves_static_json_and_interpolates_params() {
@@ -217,6 +813,9 @@ mod tests {
                 delay_ms: 0,
             },
             scenarios: vec![],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
         }];
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let listener = TcpListener::bind(addr).await.unwrap();
@@ -277,6 +876,9 @@ mod tests {
                 delay_ms: 0,
             },
             scenarios: vec![],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -324,6 +926,9 @@ mod tests {
                     delay_ms: 0,
                 },
             }],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -344,5 +949,473 @@ mod tests {
 
         let _ = tx.send(());
         let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn hot_reload_serves_updated_rule_file() {
+        let dir = TempDir::new().unwrap();
+        let rule_path = dir.path().join("collections/users/mocks/get.yaml");
+        fs::create_dir_all(rule_path.parent().unwrap()).unwrap();
+        fs::write(
+            &rule_path,
+            r#"
+name: get-user
+method: GET
+path: /users/:id
+response:
+  status: 200
+  body:
+    kind: json
+    text: '{"version":1}'
+"#,
+        )
+        .unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let root = dir.path().to_path_buf();
+        let handle =
+            tokio::spawn(
+                async move { run_with_hot_reload(root, bound, Some(rx), None, None).await },
+            );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let resp = reqwest::get(format!("http://{bound}/users/42"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(resp.text().await.unwrap(), r#"{"version":1}"#);
+
+        fs::write(
+            &rule_path,
+            r#"
+name: get-user
+method: GET
+path: /users/:id
+response:
+  status: 202
+  body:
+    kind: json
+    text: '{"version":2}'
+"#,
+        )
+        .unwrap();
+
+        let mut updated = None;
+        for _ in 0..20 {
+            let resp = reqwest::get(format!("http://{bound}/users/42"))
+                .await
+                .unwrap();
+            if resp.status() == 202 {
+                updated = Some(resp.text().await.unwrap());
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        assert_eq!(updated.as_deref(), Some(r#"{"version":2}"#));
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn control_api_reports_status_rules_and_log() {
+        let rules = vec![MockRule {
+            name: "get-user".into(),
+            method: Method::Get,
+            path: "/users/:id".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 200,
+                headers: vec![],
+                body: MockBody::Json {
+                    text: r#"{"id":"{{params.id}}"}"#.into(),
+                },
+                delay_ms: 0,
+            },
+            scenarios: vec![super::super::MockScenario {
+                name: "missing".into(),
+                active: false,
+                response: MockResponse {
+                    status: 404,
+                    headers: vec![],
+                    body: MockBody::None,
+                    delay_ms: 0,
+                },
+            }],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+        let status_text = client
+            .get(format!("http://{bound}/__mirage/status"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let status: serde_json::Value = serde_json::from_str(&status_text).unwrap();
+        assert_eq!(status["ok"], true);
+        assert_eq!(status["rules"], 1);
+        assert_eq!(status["scenarios"][0]["name"], "missing");
+
+        let rules_text = client
+            .get(format!("http://{bound}/__mirage/rules"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let rules: serde_json::Value = serde_json::from_str(&rules_text).unwrap();
+        assert_eq!(rules[0]["name"], "get-user");
+
+        let resp = reqwest::get(format!("http://{bound}/users/42"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+
+        let logs_text = client
+            .get(format!("http://{bound}/__mirage/log?limit=1"))
+            .send()
+            .await
+            .unwrap()
+            .text()
+            .await
+            .unwrap();
+        let logs: serde_json::Value = serde_json::from_str(&logs_text).unwrap();
+        assert_eq!(logs[0]["method"], "GET");
+        assert_eq!(logs[0]["path"], "/users/42");
+        assert_eq!(logs[0]["matched_rule"], "get-user");
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn control_api_switches_scenario_in_memory() {
+        let rules = vec![MockRule {
+            name: "get-user".into(),
+            method: Method::Get,
+            path: "/users/:id".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 200,
+                headers: vec![],
+                body: MockBody::Json {
+                    text: r#"{"state":"default"}"#.into(),
+                },
+                delay_ms: 0,
+            },
+            scenarios: vec![super::super::MockScenario {
+                name: "missing".into(),
+                active: false,
+                response: MockResponse {
+                    status: 404,
+                    headers: vec![],
+                    body: MockBody::Json {
+                        text: r#"{"state":"missing"}"#.into(),
+                    },
+                    delay_ms: 0,
+                },
+            }],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+        let resp = client
+            .post(format!("http://{bound}/__mirage/scenario"))
+            .header("Content-Type", "application/json")
+            .body(r#"{"scenario":"missing"}"#)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let activation_text = resp.text().await.unwrap();
+        let activation: serde_json::Value = serde_json::from_str(&activation_text).unwrap();
+        assert_eq!(activation["scenario"], "missing");
+        assert_eq!(activation["files_changed"], 0);
+        assert_eq!(activation["rules_changed"], 1);
+
+        let resp = reqwest::get(format!("http://{bound}/users/42"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 404);
+        assert_eq!(resp.text().await.unwrap(), r#"{"state":"missing"}"#);
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn random_5xx_fault_can_replace_response() {
+        let rules = vec![MockRule {
+            name: "flaky".into(),
+            method: Method::Get,
+            path: "/flaky".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 200,
+                headers: vec![],
+                body: MockBody::Json {
+                    text: r#"{"ok":true}"#.into(),
+                },
+                delay_ms: 0,
+            },
+            scenarios: vec![],
+            fault: Some(super::super::MockFault::Config(MockFaultConfig {
+                kind: MockFaultKind::Random5xx,
+                delay_ms: None,
+                probability: Some(1.0),
+            })),
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let resp = reqwest::get(format!("http://{bound}/flaky")).await.unwrap();
+        assert!([500, 502, 503].contains(&resp.status().as_u16()));
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn slow_response_fault_delays_response() {
+        let rules = vec![MockRule {
+            name: "slow".into(),
+            method: Method::Get,
+            path: "/slow".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 200,
+                headers: vec![],
+                body: MockBody::Text {
+                    content_type: "text/plain".into(),
+                    text: "ok".into(),
+                },
+                delay_ms: 0,
+            },
+            scenarios: vec![],
+            fault: Some(super::super::MockFault::Config(MockFaultConfig {
+                kind: MockFaultKind::SlowResponse,
+                delay_ms: Some(40),
+                probability: None,
+            })),
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let started = std::time::Instant::now();
+        let resp = reqwest::get(format!("http://{bound}/slow")).await.unwrap();
+        assert_eq!(resp.status(), 200);
+        assert!(started.elapsed() >= Duration::from_millis(35));
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn connection_reset_fault_closes_connection() {
+        let rules = vec![MockRule {
+            name: "reset".into(),
+            method: Method::Get,
+            path: "/reset".into(),
+            priority: 0,
+            response: MockResponse::default(),
+            scenarios: vec![],
+            fault: Some(super::super::MockFault::Kind(
+                MockFaultKind::ConnectionReset,
+            )),
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let err = reqwest::get(format!("http://{bound}/reset"))
+            .await
+            .unwrap_err();
+        assert!(err.is_request() || err.is_body() || err.is_decode());
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn partial_body_fault_closes_connection() {
+        let rules = vec![MockRule {
+            name: "partial".into(),
+            method: Method::Get,
+            path: "/partial".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 200,
+                headers: vec![],
+                body: MockBody::Text {
+                    content_type: "text/plain".into(),
+                    text: "abcdef".into(),
+                },
+                delay_ms: 0,
+            },
+            scenarios: vec![],
+            fault: Some(super::super::MockFault::Kind(MockFaultKind::PartialBody)),
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let err = reqwest::get(format!("http://{bound}/partial"))
+            .await
+            .unwrap_err();
+        assert!(err.is_request() || err.is_body() || err.is_decode());
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn timeout_fault_never_responds() {
+        let rules = vec![MockRule {
+            name: "timeout".into(),
+            method: Method::Get,
+            path: "/timeout".into(),
+            priority: 0,
+            response: MockResponse::default(),
+            scenarios: vec![],
+            fault: Some(super::super::MockFault::Kind(MockFaultKind::Timeout)),
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(80))
+            .build()
+            .unwrap();
+        let err = client
+            .get(format!("http://{bound}/timeout"))
+            .send()
+            .await
+            .unwrap_err();
+        assert!(err.is_timeout());
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn passthrough_rule_proxies_to_upstream() {
+        let upstream_rules = vec![MockRule {
+            name: "upstream".into(),
+            method: Method::Get,
+            path: "/users/:id".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 201,
+                headers: vec![("X-Upstream".into(), "yes".into())],
+                body: MockBody::Json {
+                    text: r#"{"id":"{{params.id}}","source":"upstream"}"#.into(),
+                },
+                delay_ms: 0,
+            },
+            scenarios: vec![],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
+        }];
+        let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        drop(upstream_listener);
+        let (upstream_tx, upstream_rx) = oneshot::channel();
+        let upstream_handle = tokio::spawn(async move {
+            run(upstream_rules, upstream_addr, Some(upstream_rx), None).await
+        });
+
+        let rules = vec![MockRule {
+            name: "proxy-user".into(),
+            method: Method::Get,
+            path: "/users/:id".into(),
+            priority: 0,
+            response: MockResponse::default(),
+            scenarios: vec![],
+            fault: None,
+            passthrough: true,
+            upstream_url: Some(format!("http://{upstream_addr}")),
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let resp = reqwest::get(format!("http://{bound}/users/42?include=profile"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 201);
+        assert_eq!(resp.headers()["x-upstream"], "yes");
+        assert_eq!(
+            resp.text().await.unwrap(),
+            r#"{"id":"42","source":"upstream"}"#
+        );
+
+        let _ = tx.send(());
+        let _ = upstream_tx.send(());
+        let _ = handle.await;
+        let _ = upstream_handle.await;
     }
 }

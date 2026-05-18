@@ -20,7 +20,7 @@ use crate::http::Method;
 
 pub const MOCKS_SUBDIR: &str = "mocks";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MockRule {
     pub name: String,
     pub method: Method,
@@ -31,6 +31,12 @@ pub struct MockRule {
     pub response: MockResponse,
     #[serde(default)]
     pub scenarios: Vec<MockScenario>,
+    #[serde(default)]
+    pub fault: Option<MockFault>,
+    #[serde(default)]
+    pub passthrough: bool,
+    #[serde(default)]
+    pub upstream_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -65,6 +71,61 @@ pub struct MockResponse {
     /// Static delay in milliseconds before responding.
     #[serde(default)]
     pub delay_ms: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(untagged)]
+pub enum MockFault {
+    Kind(MockFaultKind),
+    Config(MockFaultConfig),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum MockFaultKind {
+    Timeout,
+    SlowResponse,
+    ConnectionReset,
+    PartialBody,
+    Random5xx,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MockFaultConfig {
+    pub kind: MockFaultKind,
+    #[serde(default)]
+    pub delay_ms: Option<u64>,
+    #[serde(default)]
+    pub probability: Option<f64>,
+}
+
+impl MockFault {
+    pub fn kind(&self) -> MockFaultKind {
+        match self {
+            MockFault::Kind(kind) => kind.clone(),
+            MockFault::Config(config) => config.kind.clone(),
+        }
+    }
+
+    pub fn delay_ms(&self) -> u64 {
+        match self {
+            MockFault::Kind(MockFaultKind::SlowResponse) => 1_000,
+            MockFault::Config(config) if config.kind == MockFaultKind::SlowResponse => {
+                config.delay_ms.unwrap_or(1_000)
+            }
+            _ => 0,
+        }
+    }
+
+    pub fn probability(&self) -> f64 {
+        match self {
+            MockFault::Kind(MockFaultKind::Random5xx) => 1.0,
+            MockFault::Config(config) if config.kind == MockFaultKind::Random5xx => {
+                config.probability.unwrap_or(1.0).clamp(0.0, 1.0)
+            }
+            _ => 0.0,
+        }
+    }
 }
 
 impl Default for MockResponse {
@@ -285,6 +346,9 @@ mod tests {
                 delay_ms: 0,
             },
             scenarios: vec![],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
         };
         let y = serde_yaml::to_string(&rule).unwrap();
         let back: MockRule = serde_yaml::from_str(&y).unwrap();
