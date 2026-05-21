@@ -1,8 +1,40 @@
 <script lang="ts">
+  import ArrowRight from 'lucide-svelte/icons/arrow-right';
+
   const meta = {
     title: 'Documentation',
-    description: 'Entry points for getting started, mock servers, and API reference — hosted on docs.stubhouse.dev.'
+    description: 'Entry points for getting started, mock servers, CLI automation, and workspace files.'
   };
+
+  const cards = [
+    {
+      title: 'Getting started',
+      href: 'https://github.com/stubhouse/stubhouse#readme',
+      copy: 'Clone the repo, run the desktop app, open a workspace, and send the first request.'
+    },
+    {
+      title: 'Mock server',
+      href: '/mocks',
+      copy: 'YAML rules, scenarios, hot reload, control routes, faults, passthrough, recording, and resources.'
+    },
+    {
+      title: 'CLI reference',
+      href: 'https://github.com/stubhouse/stubhouse/blob/main/crates/stubhouse-cli/src/main.rs',
+      copy: 'init, validate, list, show, envs, import, export, serve, scenario, and test.'
+    }
+  ];
+
+  const topics = [
+    'Workspace layout',
+    'Environment variables',
+    'Postman and OpenAPI import',
+    'YAML schemas',
+    'cURL and OpenAPI export',
+    'Headless stubhouse serve',
+    'Mock scenarios and live logs',
+    'Faults, passthrough, recording, and resource fixtures',
+    'Rhai assertions and JUnit XML'
+  ];
 </script>
 
 <svelte:head>
@@ -10,42 +42,39 @@
   <meta name="description" content={meta.description} />
 </svelte:head>
 
-<section class="container section">
-  <p class="eyebrow">Docs</p>
-  <h1 class="display-2">Documentation</h1>
-  <p class="body-lg prose-width">
-    Primary docs will live at <a class="link-inline" href="https://docs.stubhouse.dev">docs.stubhouse.dev</a>. This gateway stays on the
-    marketing domain so we can move engines without breaking navigation.
-  </p>
-
-  <div class="cards">
-    <a class="card link-inline" href="https://docs.stubhouse.dev/getting-started">
-      <h2 class="display-3">Getting started</h2>
-      <p class="caption">Install, open a workspace, send your first request.</p>
-    </a>
-    <a class="card link-inline" href="https://docs.stubhouse.dev/mocks">
-      <h2 class="display-3">Mock server guide</h2>
-      <p class="caption">YAML rules, route matching, headless serve, and Phase 2 roadmap.</p>
-    </a>
-    <a class="card link-inline" href="https://docs.stubhouse.dev/cli">
-      <h2 class="display-3">CLI reference</h2>
-      <p class="caption">`init`, `validate`, `envs`, `import postman`, `export curl`, `serve`.</p>
-    </a>
+<section class="container section page-shell">
+  <div class="page-hero-grid">
+    <div>
+      <p class="eyebrow">Docs</p>
+      <h1 class="display-2">Documentation</h1>
+      <p class="body-lg prose-width">
+        The public docs are being shaped from the working codebase. These entry points reflect the current CLI, desktop workflow, and
+        mock runtime instead of pointing at a separate placeholder host.
+      </p>
+    </div>
+    <pre class="mono-panel" aria-label="CLI commands">{`stubhouse init acme-api
+stubhouse import openapi ./openapi.yaml
+stubhouse serve --port 4000
+stubhouse scenario activate outage
+stubhouse test --env ci --junit results.xml`}</pre>
   </div>
 
-  <label class="visually-hidden" for="doc-search">Search the docs</label>
-  <input id="doc-search" class="search mono" type="search" placeholder="Search (wired to docs host next)" disabled />
+  <div class="cards">
+    {#each cards as card}
+    <a class="card feature-card" href={card.href}>
+      <span class="card__top">
+        <h2 class="feature-card__title">{card.title}</h2>
+        <ArrowRight size={16} strokeWidth={1.75} aria-hidden="true" />
+      </span>
+      <p class="feature-card__copy">{card.copy}</p>
+    </a>
+    {/each}
+  </div>
 
-  <ul class="mono list">
-    <li>Workspace layout</li>
-    <li>Environment variables</li>
-    <li>Import formats</li>
-    <li>YAML schemas</li>
-    <li>Copy and export as cURL</li>
-    <li>Headless `stubhouse serve`</li>
-    <li>Postman Collection v2.1 import</li>
-    <li>Mock scenarios, passthrough, recording, and scripts roadmap</li>
-    <li>Troubleshooting TLS</li>
+  <ul class="mono list surface-panel">
+    {#each topics as topic}
+      <li>{topic}</li>
+    {/each}
   </ul>
 </section>
 
@@ -53,7 +82,7 @@
   .cards {
     margin-top: 40px;
     display: grid;
-    gap: 16px;
+    gap: 12px;
   }
 
   @media (min-width: 900px) {
@@ -63,38 +92,26 @@
   }
 
   .card {
-    display: block;
-    padding: 20px;
-    border: 1px solid var(--border-default);
-    background: var(--bg-surface);
-    text-decoration: none;
-    color: inherit;
-    transition: border-color 200ms ease;
+    display: flex;
+    flex-direction: column;
+    min-height: 150px;
   }
 
-  .card:hover,
-  .card:focus-visible {
-    border-color: var(--border-strong);
+  .card__top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
   }
 
-  .card .caption {
-    margin: 8px 0 0;
-  }
-
-  .search {
-    margin-top: 40px;
-    width: 100%;
-    max-width: 480px;
-    min-height: 48px;
-    padding: 0 12px;
-    border: 1px solid var(--border-default);
-    background: var(--bg-surface);
-    color: var(--text-primary);
+  .card :global(svg) {
+    color: var(--text-tertiary);
+    flex: 0 0 auto;
   }
 
   .list {
     margin-top: 32px;
-    padding-left: 18px;
+    padding: 18px 18px 18px 34px;
     color: var(--text-secondary);
     line-height: 1.8;
     font-size: 14px;

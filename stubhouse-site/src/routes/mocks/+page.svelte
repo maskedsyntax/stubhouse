@@ -5,7 +5,7 @@
 
   const meta = {
     title: 'The mock server',
-    description: 'Embedded HTTP mocks, YAML rules, priority route matching, and the roadmap for scenarios, logs, faults, and recording.'
+    description: 'Embedded HTTP mocks, YAML rules, scenarios, logs, hot reload, faults, passthrough, recording, and stateful resources.'
   };
 
   const ruleYaml = `matcher:
@@ -19,14 +19,31 @@ response:
     id: "{{params.id}}"
     name: "Alice"`;
 
-  const roadmap = [
+  const runtime = [
     'Scenario model and switcher',
     'Desktop mock server panel with live request log',
-    'Hot reload for mock YAML',
+    'Hot reload for mock YAML, resources, and recording config',
     'Control API under /__mirage/*',
     'Fault injection and selective passthrough',
-    'Recording mode and fixture capture'
+    'Recording mode, scrub config, fixture capture, and stateful resources'
   ];
+
+  const scenarioYaml = `name: get-user
+method: GET
+path: /users/:id
+response:
+  status: 200
+  body:
+    kind: json
+    text: '{"id":"{{params.id}}","state":"default"}'
+scenarios:
+  - name: outage
+    active: false
+    response:
+      status: 503
+      body:
+        kind: json
+        text: '{"error":"maintenance"}'`;
 </script>
 
 <svelte:head>
@@ -34,21 +51,32 @@ response:
   <meta name="description" content={meta.description} />
 </svelte:head>
 
-<section class="page-hero section-tight container">
-  <p class="eyebrow">Mocks</p>
-  <h1 class="display-2">The mock server is the product.</h1>
-  <p class="body-lg prose-width">
-    The core mock runtime is now in place: YAML rules, a Rust parser, a priority trie matcher, and `stubhouse serve` for headless
-    local APIs. The desktop panel, scenarios, hot reload, faults, passthrough, and recording are the next layer.
-  </p>
+<section class="page-shell section-tight container">
+  <div class="page-hero-grid">
+    <div>
+      <p class="eyebrow">Mocks</p>
+      <h1 class="display-2">The mock server is the product.</h1>
+      <p class="body-lg prose-width">
+        The mock runtime now includes YAML rules, a Rust parser, priority route matching, `stubhouse serve`, scenarios, hot reload,
+        live logs, faults, passthrough, recording, and stateful resource helpers.
+      </p>
+      <div class="status-strip" aria-label="Mock runtime status">
+        <span class="status-pill">CLI serve</span>
+        <span class="status-pill">Desktop panel</span>
+        <span class="status-pill">Scenarios</span>
+        <span class="status-pill">Hot reload</span>
+      </div>
+    </div>
+    <CodeBlock filename="scenario.yaml" language="yaml" code={scenarioYaml} />
+  </div>
 </section>
 
 <SectionReveal class="section">
   <div class="container">
     <h2 class="display-3 fade-up">Architecture</h2>
     <p class="body-lg prose-width fade-up stagger-1">
-      The mock server is built on Hyper and Tokio in the Rust core. Today it binds locally from the CLI, loads workspace mock rules,
-      and matches routes with exact paths, path params, wildcards, and catch-alls.
+      The mock server is built on Hyper and Tokio in the Rust core. It binds locally from the CLI or app, loads workspace rules,
+      emits request logs, reloads valid edits in place, and matches routes with exact paths, path params, wildcards, and catch-alls.
     </p>
     <DemoFrame title="Diagram — runtime" class="fade-up stagger-2">
       <div class="diagram mono">
@@ -83,12 +111,12 @@ response:
 
 <SectionReveal class="section">
   <div class="container">
-    <h2 class="display-3 fade-up">Next up</h2>
+    <h2 class="display-3 fade-up">Runtime surface</h2>
     <p class="body-lg prose-width fade-up stagger-1">
-      Phase 2 is focused on making the mock runtime interactive from the desktop app and controllable from tests.
+      The current phase is focused on making those mock features easier to inspect, compose, and document from the desktop workflow.
     </p>
     <ul class="mono table-like fade-up stagger-2">
-      {#each roadmap as item}
+      {#each runtime as item}
         <li>{item}</li>
       {/each}
     </ul>
@@ -96,10 +124,6 @@ response:
 </SectionReveal>
 
 <style>
-  .page-hero {
-    padding-top: 48px;
-  }
-
   .diagram pre {
     margin: 0;
     padding: 16px;
@@ -113,6 +137,7 @@ response:
     margin-top: 24px;
     padding: 16px;
     border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
     background: var(--bg-surface);
     font-size: 13px;
     line-height: 1.6;

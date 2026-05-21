@@ -41,7 +41,7 @@
           {:else if slide === 1}
             <pre>{`200 OK · 128 ms\n{\n  "items": [\n    { "id": "u1", "name": "Ada" }\n  ]\n}`}</pre>
           {:else if slide === 2}
-            <pre>{`stubhouse serve . --port 4000\nmock server active → 127.0.0.1:4000`}</pre>
+            <pre>{`stubhouse serve --port 4000\nmock server active -> 127.0.0.1:4000`}</pre>
           {:else}
             <pre>{`404 Not Found\n{\n  "error": "User not found"\n}`}</pre>
           {/if}

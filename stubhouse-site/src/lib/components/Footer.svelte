@@ -25,9 +25,6 @@
         <li>
           <a href="https://github.com/stubhouse/stubhouse/blob/main/spec.md" target="_blank" rel="noopener noreferrer">Roadmap</a>
         </li>
-        <li>
-          <a href="https://discord.gg/stubhouse" target="_blank" rel="noopener noreferrer">Discord</a>
-        </li>
       </ul>
     </div>
     <div>

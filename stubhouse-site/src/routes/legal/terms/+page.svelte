@@ -1,7 +1,7 @@
 <section class="container legal">
   <h1 class="display-3">Terms</h1>
   <p class="body-lg">
-    Legal terms for stubhouse.dev will be finalized prior to public launch. The open-source software remains under Apache 2.0 as
+    Legal terms for stubhouse.dev will be finalized prior to public launch. The open-source software remains under the MIT License as
     shipped in the repository `LICENSE`.
   </p>
 </section>

@@ -27,10 +27,18 @@
   <meta name="description" content={meta.description} />
 </svelte:head>
 
-<section class="container section">
-  <p class="eyebrow">Blog</p>
-  <h1 class="display-2">Writing</h1>
-  <p class="body-lg prose-width">Long-form posts stay technical. No content calendar — only pieces worth finishing.</p>
+<section class="container section page-shell">
+  <div class="page-hero-grid">
+    <div>
+      <p class="eyebrow">Blog</p>
+      <h1 class="display-2">Writing</h1>
+      <p class="body-lg prose-width">Long-form posts stay technical. No content calendar — only pieces worth finishing.</p>
+    </div>
+    <div class="surface-panel blog-note">
+      <p class="mono">Latest notes</p>
+      <span>Route matching, scripting tradeoffs, and the mock runtime as it becomes usable.</span>
+    </div>
+  </div>
 
   <ul class="posts">
     {#each posts as p}
@@ -50,15 +58,29 @@
     list-style: none;
     margin: 48px 0 0;
     padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
+    display: grid;
+    gap: 12px;
+  }
+
+  @media (min-width: 900px) {
+    .posts {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
 
   .post {
     display: block;
     text-decoration: none;
     color: inherit;
+    min-height: 100%;
+    padding: 20px;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    background: var(--bg-surface);
+    box-shadow: inset 0 1px 0 var(--border-subtle);
+    transition:
+      border-color 180ms ease,
+      transform 180ms var(--ease-out);
   }
 
   .post__title {
@@ -77,9 +99,25 @@
     max-width: 62ch;
   }
 
-  .post:hover .post__title,
-  .post:focus-visible .post__title {
-    text-decoration: underline;
-    text-underline-offset: 4px;
+  .post:hover,
+  .post:focus-visible {
+    border-color: var(--border-strong);
+    transform: translateY(-2px);
+  }
+
+  .blog-note {
+    padding: 22px;
+  }
+
+  .blog-note p {
+    margin: 0 0 12px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+  }
+
+  .blog-note span {
+    color: var(--text-secondary);
+    font-size: var(--text-body-sm);
+    line-height: 1.55;
   }
 </style>

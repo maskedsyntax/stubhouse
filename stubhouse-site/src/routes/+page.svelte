@@ -32,15 +32,16 @@ tags:
   - read`;
 
   const cliExample = `# Create a workspace, validate it, serve mocks
-stubhouse init .
-stubhouse validate .
-stubhouse envs .
-stubhouse import postman ./postman_collection.json
+stubhouse init acme-api
+stubhouse validate
+stubhouse envs
+stubhouse import openapi ./openapi.yaml
+stubhouse scenario list
 
-stubhouse serve . --port 4000`;
+stubhouse serve --port 4000`;
 
   const ciExample = `# CI: serve local mocks, then run your app tests
-stubhouse serve . --port 4000 --env test &
+stubhouse serve --port 4000 &
 MOCK_PID=$!
 
 npm test
@@ -53,7 +54,7 @@ $ cd stubhouse && cargo build --release
 
   const curlExample = `curl http://127.0.0.1:4000/users/usr_1
 curl -X POST http://127.0.0.1:4000/users -d '{"name":"Ada"}'
-stubhouse export curl ./collections/users/get-user.yaml --env dev`;
+stubhouse export curl collections/users/get-user.yaml --env dev`;
 
   const shipped = [
     {
@@ -68,33 +69,33 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
     },
     {
       name: 'Import / export',
-      hint: 'Postman Collection v2.1 import and copy/export as cURL.',
-      yaml: 'stubhouse import postman collection.json'
+      hint: 'Postman and OpenAPI 3 import, plus cURL and OpenAPI YAML export.',
+      yaml: 'stubhouse import openapi ./openapi.yaml'
     },
     {
       name: 'Headless mocks',
-      hint: 'Embedded Hyper mock server with YAML rules and priority route matching.',
-      yaml: 'stubhouse serve . --port 4000'
+      hint: 'Embedded Hyper mock server with YAML rules, hot reload, request logs, and control routes.',
+      yaml: 'stubhouse serve --port 4000'
     },
     {
       name: 'Route matcher',
-      hint: 'Exact paths, path params, wildcards, catch-alls, and method matching.',
-      yaml: 'GET /users/:id'
+      hint: 'Exact paths, path params, wildcards, catch-alls, method matching, and script conditions.',
+      yaml: 'GET /users/:id when params.id != ""'
     },
     {
-      name: 'History',
-      hint: 'SQLite-backed request history for the desktop request workflow.',
-      yaml: 'history: sqlite'
+      name: 'Tests',
+      hint: 'Rhai response assertions with CLI and desktop test runs, including JUnit XML output.',
+      yaml: 'stubhouse test --env ci --junit results.xml'
     }
   ];
 
-  const nextMockFeatures = [
-    'Scenario switcher for named response states',
+  const mockRuntimeFeatures = [
+    'Named scenarios with CLI and desktop activation',
     'Mock server panel with on/off, port picker, and live request log',
-    'Hot reload for mock YAML changes',
+    'Hot reload for mock YAML, resources, and recording config',
     'Control API under /__mirage/*',
     'Fault injection and selective passthrough',
-    'Recording mode, fixtures, and stateful resources'
+    'Recording mode, scrub rules, fixtures, and stateful resources'
   ];
 </script>
 
@@ -161,8 +162,8 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
       <p class="eyebrow fade-up">Two tools. One binary.</p>
       <h2 class="display-2 fade-up stagger-1">A request client and a mock server, both first-class.</h2>
       <p class="body-lg fade-up stagger-2">
-        Other API clients bolt on mocks as a paid afterthought or a separate process. StubHouse already pairs the daily request
-        workflow with a headless local mock runtime, and the desktop mock panel is the next piece of active development.
+        Other API clients bolt on mocks as a paid afterthought or a separate process. StubHouse pairs the daily request workflow with
+        a headless local mock runtime, a desktop server panel, live logs, scenarios, and test-runner hooks.
       </p>
     </div>
     <div class="dual fade-up stagger-2">
@@ -241,13 +242,13 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
       <div>
         <h3 class="display-3 fade-up">Next in mocks</h3>
         <p class="body-lg fade-up stagger-1">
-          The roadmap is deliberately focused on the parts that make mocks useful during product work: scenarios, logs, hot reload,
-          control APIs, faults, passthrough, and recording.
+          The runtime now covers the parts that make mocks useful during product work: scenarios, logs, hot reload, control APIs,
+          faults, passthrough, recording, and stateful resources.
         </p>
       </div>
       <div class="fade-up stagger-2">
         <ul class="roadmap-list">
-          {#each nextMockFeatures as feature}
+          {#each mockRuntimeFeatures as feature}
             <li>{feature}</li>
           {/each}
         </ul>
@@ -262,7 +263,8 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
     <h2 class="display-2 fade-up stagger-1">The daily API client path is already covered.</h2>
     <p class="body-lg prose-width fade-up stagger-2">
       Phase 1 is complete: requests, auth composition, environments, interpolation, history, import, cURL export, and the CLI. The
-      mock runtime foundation is underway on top of that same file-based workspace.
+      mock runtime now builds on top of that same file-based workspace with scenarios, hot reload, live logs, faults, passthrough,
+      recording, resources, and control routes.
     </p>
     <div class="fault-grid fade-up stagger-3">
       {#each shipped as f}
@@ -282,17 +284,17 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
       <p class="eyebrow fade-up">Automation path</p>
       <h2 class="display-2 fade-up stagger-1">A CLI first, then scripting on top.</h2>
       <p class="body-lg fade-up stagger-2">
-        The CLI can initialize, validate, inspect environments, import Postman collections, export cURL, and serve mocks. Rhai
-        scripting and the test runner are planned for the next phase, after the mock server workflow is complete.
+        The CLI can initialize, validate, inspect environments, import Postman or OpenAPI, export cURL or OpenAPI YAML, serve mocks,
+        switch scenarios, and run Rhai assertions with optional JUnit output.
       </p>
     </div>
     <div class="automation-stack fade-up stagger-2">
       <CodeBlock filename="terminal" language="bash" code={cliExample} />
       <DemoFrame title="Test runner">
         <div class="tests__panel mono">
-          <p>Rhai assertions · planned</p>
-          <p>JUnit XML output · planned</p>
-          <p>Mock rule conditions · planned</p>
+          <p>Rhai assertions · shipped</p>
+          <p>JUnit XML output · shipped</p>
+          <p>Mock rule conditions · shipped</p>
         </div>
       </DemoFrame>
     </div>
@@ -347,7 +349,7 @@ stubhouse export curl ./collections/users/get-user.yaml --env dev`;
       <h2 class="display-2 fade-up stagger-1">Native binary. No Electron.</h2>
       <p class="body-lg fade-up stagger-2">
         Tauri 2 shell. Rust core. `hyper` HTTP runtime. `rustls` for TLS. Embedded mock server runs in a Tokio task in the same
-        process as the UI. Numbers below are illustrative until we publish measured builds beside shipping artifacts.
+        process as the UI. Numbers below stay illustrative until published release artifacts include measured install sizes.
       </p>
     </div>
     <div class="fade-up stagger-2 chart" aria-label="Illustrative install size comparison">
