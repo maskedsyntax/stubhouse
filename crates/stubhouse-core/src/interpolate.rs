@@ -46,12 +46,12 @@ pub fn interpolate_string(s: &str, vars: &HashMap<String, String>) -> String {
 
 fn resolve_variable(key: &str, vars: &HashMap<String, String>) -> Option<String> {
     if let Some(builtin) = key.strip_prefix('$') {
-        return resolve_builtin(builtin);
+        return resolve_builtin(builtin, vars);
     }
     vars.get(key).cloned()
 }
 
-fn resolve_builtin(name: &str) -> Option<String> {
+fn resolve_builtin(name: &str, vars: &HashMap<String, String>) -> Option<String> {
     match name {
         "timestamp" => {
             let ts = std::time::SystemTime::now()
@@ -78,14 +78,50 @@ fn resolve_builtin(name: &str) -> Option<String> {
             ))
         }
         "randomUUID" => Some(uuid_v4()),
+        "randomInt" => Some(random_int(0, 1_000_000).to_string()),
+        "randomEmail" => Some(format!(
+            "{}{}@example.test",
+            random_name().to_ascii_lowercase(),
+            random_int(100, 999)
+        )),
+        "randomName" => Some(random_name()),
         _ => {
             if let Some(var_name) = name.strip_prefix("env.") {
                 std::env::var(var_name).ok()
+            } else if let Some(key) = name.strip_prefix("response.") {
+                vars.get(&format!("$response.{key}"))
+                    .or_else(|| vars.get(&format!("response.{key}")))
+                    .cloned()
+            } else if let Some(key) = name.strip_prefix("faker.") {
+                resolve_faker(key)
             } else {
                 None
             }
         }
     }
+}
+
+fn resolve_faker(name: &str) -> Option<String> {
+    match name {
+        "name" | "person.name" => Some(random_name()),
+        "email" | "internet.email" => resolve_builtin("randomEmail", &HashMap::new()),
+        "number.int" | "randomInt" => resolve_builtin("randomInt", &HashMap::new()),
+        _ => None,
+    }
+}
+
+fn random_name() -> String {
+    const NAMES: &[&str] = &[
+        "Alice", "Ben", "Casey", "Devon", "Elliot", "Fatima", "Gray", "Harper",
+    ];
+    NAMES[random_int(0, NAMES.len() as u64 - 1) as usize].to_string()
+}
+
+fn random_int(min: u64, max: u64) -> u64 {
+    let mut bytes = [0u8; 8];
+    getrandom(&mut bytes);
+    let n = u64::from_le_bytes(bytes);
+    min + (n % (max - min + 1))
 }
 
 fn days_to_ymd(day_count: i64) -> (i64, u32, u32) {
@@ -243,6 +279,21 @@ mod tests {
         let result = interpolate_string("{{$randomUUID}}", &HashMap::new());
         assert_eq!(result.len(), 36);
         assert_eq!(result.chars().filter(|c| *c == '-').count(), 4);
+    }
+
+    #[test]
+    fn additional_dynamic_variables_resolve() {
+        let int = interpolate_string("{{$randomInt}}", &HashMap::new());
+        assert!(int.parse::<u64>().is_ok());
+        assert!(interpolate_string("{{$randomEmail}}", &HashMap::new()).contains("@example.test"));
+        assert!(!interpolate_string("{{$randomName}}", &HashMap::new()).is_empty());
+        assert!(!interpolate_string("{{$faker.name}}", &HashMap::new()).is_empty());
+    }
+
+    #[test]
+    fn response_variables_chain_from_context() {
+        let vars = HashMap::from([("$response.token".into(), "abc".into())]);
+        assert_eq!(interpolate_string("{{ $response.token }}", &vars), "abc");
     }
 
     #[test]

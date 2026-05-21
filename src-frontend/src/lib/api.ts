@@ -195,3 +195,18 @@ export interface ImportSummary {
 export async function importPostman(path: string): Promise<ImportSummary> {
   return await invoke<ImportSummary>("import_postman", { path });
 }
+
+export interface TestAssertionResult {
+  request_id: string;
+  name: string;
+  passed: boolean;
+  message: string | null;
+}
+
+export interface TestRunResult {
+  assertions: TestAssertionResult[];
+}
+
+export async function runTests(): Promise<TestRunResult> {
+  return await invoke<TestRunResult>("run_tests");
+}

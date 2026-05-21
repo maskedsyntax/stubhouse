@@ -152,6 +152,64 @@ impl ScriptRuntime {
             variables: map_to_strings(scope.get_value("variables").unwrap_or_default()),
         })
     }
+
+    pub fn eval_response_bool(
+        &self,
+        source: &str,
+        response: &Response,
+        context: &ScriptContext,
+    ) -> Result<bool, ScriptError> {
+        let ast = self.compile(source)?;
+        let mut scope = scope_for(context);
+        scope.push("response", response_to_map(response));
+        let value = self
+            .engine
+            .eval_ast_with_scope::<Dynamic>(&mut scope, &ast)
+            .map_err(|e| ScriptError::Eval(e.to_string()))?;
+        let actual = value.type_name().to_string();
+        value.try_cast::<bool>().ok_or_else(|| ScriptError::Type {
+            expected: "bool".into(),
+            actual,
+        })
+    }
+
+    pub fn eval_mock_condition(
+        &self,
+        source: &str,
+        method: Method,
+        path: &str,
+        params: &HashMap<String, String>,
+    ) -> Result<bool, ScriptError> {
+        let ast = self.compile(source)?;
+        let mut scope = Scope::new();
+        scope.push("request", mock_request_to_map(method, path, params));
+        let value = self
+            .engine
+            .eval_ast_with_scope::<Dynamic>(&mut scope, &ast)
+            .map_err(|e| ScriptError::Eval(e.to_string()))?;
+        let actual = value.type_name().to_string();
+        value.try_cast::<bool>().ok_or_else(|| ScriptError::Type {
+            expected: "bool".into(),
+            actual,
+        })
+    }
+
+    pub fn render_mock_body(
+        &self,
+        source: &str,
+        method: Method,
+        path: &str,
+        params: &HashMap<String, String>,
+    ) -> Result<String, ScriptError> {
+        let ast = self.compile(source)?;
+        let mut scope = Scope::new();
+        scope.push("request", mock_request_to_map(method, path, params));
+        let value = self
+            .engine
+            .eval_ast_with_scope::<Dynamic>(&mut scope, &ast)
+            .map_err(|e| ScriptError::Eval(e.to_string()))?;
+        Ok(value.to_string())
+    }
 }
 
 fn scope_for(context: &ScriptContext) -> Scope<'static> {
@@ -316,6 +374,14 @@ fn response_to_map(response: &Response) -> Map {
     map
 }
 
+fn mock_request_to_map(method: Method, path: &str, params: &HashMap<String, String>) -> Map {
+    let mut map = Map::new();
+    map.insert("method".into(), Dynamic::from(method_to_string(method)));
+    map.insert("path".into(), Dynamic::from(path.to_string()));
+    map.insert("params".into(), Dynamic::from(strings_to_map(params)));
+    map
+}
+
 fn script_assert(condition: bool, message: &str) -> Result<(), Box<EvalAltResult>> {
     if condition {
         Ok(())
@@ -469,5 +535,28 @@ mod tests {
             )
             .unwrap_err();
         assert!(err.to_string().contains("expected ok"));
+    }
+
+    #[test]
+    fn mock_condition_and_body_scripts_use_request_context() {
+        let runtime = ScriptRuntime::new();
+        let params = HashMap::from([("id".into(), "42".into())]);
+        assert!(runtime
+            .eval_mock_condition(
+                r#"request.method == "GET" && request.params["id"] == "42""#,
+                Method::Get,
+                "/users/42",
+                &params,
+            )
+            .unwrap());
+        let body = runtime
+            .render_mock_body(
+                r#"`{"id":"${request.params["id"]}"}`"#,
+                Method::Get,
+                "/users/42",
+                &params,
+            )
+            .unwrap();
+        assert_eq!(body, r#"{"id":"42"}"#);
     }
 }

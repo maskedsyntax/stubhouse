@@ -12,6 +12,7 @@ import {
   loadRequest,
   mockServerStatus,
   openWorkspace,
+  runTests,
   saveRequest,
   startMockServer,
   stopMockServer,
@@ -26,6 +27,7 @@ import {
   type RequestEntry,
   type ScenarioActivation,
   type ScenarioEntry,
+  type TestRunResult,
   type WorkspaceInfo,
 } from "./api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
@@ -40,6 +42,8 @@ type State = {
   activeEnv: ActiveEnvironment | null;
   activeId: string | null;
   error: string | null;
+  testRun: TestRunResult | null;
+  testsRunning: boolean;
 };
 
 function createStore() {
@@ -53,6 +57,8 @@ function createStore() {
     activeEnv: null,
     activeId: null,
     error: null,
+    testRun: null,
+    testsRunning: false,
   });
 
   async function pickAndOpen(): Promise<boolean> {
@@ -200,6 +206,22 @@ function createStore() {
     }
   }
 
+  async function runWorkspaceTests(): Promise<TestRunResult | null> {
+    if (!state.info) return null;
+    state.testsRunning = true;
+    try {
+      const result = await runTests();
+      state.testRun = result;
+      state.error = null;
+      return result;
+    } catch (e) {
+      state.error = typeof e === "string" ? e : String(e);
+      return null;
+    } finally {
+      state.testsRunning = false;
+    }
+  }
+
   async function load(id: string): Promise<RequestDefinition | null> {
     try {
       const def = await loadRequest(id);
@@ -242,6 +264,8 @@ function createStore() {
     get activeEnv() { return state.activeEnv; },
     get activeId() { return state.activeId; },
     get error() { return state.error; },
+    get testRun() { return state.testRun; },
+    get testsRunning() { return state.testsRunning; },
     set activeId(v: string | null) { state.activeId = v; },
     pickAndOpen,
     openPath,
@@ -249,6 +273,7 @@ function createStore() {
     refreshHistory,
     replayHistory,
     wipeHistory,
+    runWorkspaceTests,
     activate,
     deactivate,
     activateScenario,

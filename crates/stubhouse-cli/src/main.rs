@@ -10,7 +10,7 @@ use stubhouse_core::{
         activate_scenario, list_scenarios, load_rules,
         server::{run_with_hot_reload, MockReload},
     },
-    to_curl, Workspace,
+    run_workspace_tests, to_curl, Workspace,
 };
 
 #[derive(Parser)]
@@ -70,6 +70,15 @@ enum Cmd {
     Scenario {
         #[command(subcommand)]
         action: ScenarioCmd,
+    },
+    /// Run request test assertions in the workspace
+    Test {
+        /// Apply this environment's variables while running tests
+        #[arg(long)]
+        env: Option<String>,
+        /// Write JUnit XML results to this file
+        #[arg(long)]
+        junit: Option<PathBuf>,
     },
 }
 
@@ -135,6 +144,43 @@ fn run(cli: Cli) -> Result<(), String> {
         } => export_curl(&root, &id, env.as_deref()),
         Cmd::Serve { port, bind } => serve(&root, &bind, port),
         Cmd::Scenario { action } => scenario(&root, action),
+        Cmd::Test { env, junit } => test_workspace(&root, env.as_deref(), junit.as_deref()),
+    }
+}
+
+fn test_workspace(
+    root: &std::path::Path,
+    env_name: Option<&str>,
+    junit: Option<&std::path::Path>,
+) -> Result<(), String> {
+    let _ws = Workspace::open(root).map_err(|e| e.to_string())?;
+    let env = match env_name {
+        Some(name) => Some(load_environment(root, name).map_err(|e| e.to_string())?),
+        None => None,
+    };
+    let rt = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
+    let result = rt.block_on(run_workspace_tests(root, env.as_ref()))?;
+    for assertion in &result.assertions {
+        let marker = if assertion.passed { "ok" } else { "FAIL" };
+        println!("{marker} {} :: {}", assertion.request_id, assertion.name);
+        if let Some(message) = &assertion.message {
+            println!("  {message}");
+        }
+    }
+    if let Some(path) = junit {
+        std::fs::write(path, stubhouse_core::junit_xml(&result))
+            .map_err(|e| format!("write {}: {e}", path.display()))?;
+    }
+    println!(
+        "test result: {} passed; {} failed; {} total",
+        result.passed(),
+        result.failed(),
+        result.total()
+    );
+    if result.success() {
+        Ok(())
+    } else {
+        Err(format!("{} assertion(s) failed", result.failed()))
     }
 }
 

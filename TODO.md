@@ -54,12 +54,12 @@ Top of list is "do next". Mark with `[x]` when done.
 - [x] Embed `rhai` scripting engine
 - [x] Pre-request scripts (mutate `request.*`)
 - [x] Post-response scripts (assertions, variable extraction)
-- [ ] Mock rule Rhai conditions + body generators
-- [ ] `test(...)` assertion DSL + test runner
-- [ ] `stubhouse test` CLI with JUnit XML output
-- [ ] Test results panel in UI
-- [ ] Dynamic variables: `$randomInt`, `$randomEmail`, `$randomName`, `$faker.*`, `$response.*` chaining
-  - [x] `$timestamp`, `$isoTimestamp`, `$randomUUID`, `$env.*` already done
+- [x] Mock rule Rhai conditions + body generators
+- [x] `test(...)` assertion DSL + test runner
+- [x] `stubhouse test` CLI with JUnit XML output
+- [x] Test results panel in UI
+- [x] Dynamic variables: `$randomInt`, `$randomEmail`, `$randomName`, `$faker.*`, `$response.*` chaining
+  - [x] `$timestamp`, `$isoTimestamp`, `$randomUUID`, `$env.*`, `$randomInt`, `$randomEmail`, `$randomName`, `$faker.*`, `$response.*` already done
 
 ---
 

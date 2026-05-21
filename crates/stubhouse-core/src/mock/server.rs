@@ -22,7 +22,7 @@ use super::{
     load_rules, render_body, MockBody, MockError, MockFault, MockFaultKind, MockRule,
     ScenarioActivation,
 };
-use crate::http::Method;
+use crate::{http::Method, script::ScriptRuntime};
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 type MockResponseBody = BoxBody<Bytes, BoxError>;
@@ -209,6 +209,7 @@ async fn handle(
                 rule.fault.clone(),
                 rule.passthrough,
                 rule.upstream_url.clone(),
+                rule.condition_script.clone(),
                 params,
             )
         })
@@ -219,7 +220,42 @@ async fn handle(
         Vec<(String, String)>,
         Option<String>,
     ) = match matched {
-        Some((rule_name, response, fault, passthrough, upstream_url, params)) => {
+        Some((rule_name, response, fault, passthrough, upstream_url, condition_script, params)) => {
+            if let Some(condition_script) = &condition_script {
+                let condition = {
+                    let runtime = ScriptRuntime::new();
+                    runtime.eval_mock_condition(condition_script, method, &path, &params)
+                };
+                match condition {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        return finish_response(
+                            state,
+                            log,
+                            method,
+                            path,
+                            404,
+                            Bytes::from_static(b"{\"error\":\"no matching mock rule\"}"),
+                            vec![("Content-Type".into(), "application/json".into())],
+                            None,
+                        )
+                        .await;
+                    }
+                    Err(e) => {
+                        return finish_response(
+                            state,
+                            log,
+                            method,
+                            path,
+                            500,
+                            Bytes::from(format!(r#"{{"error":"mock condition failed: {e}"}}"#)),
+                            vec![("Content-Type".into(), "application/json".into())],
+                            Some(rule_name),
+                        )
+                        .await;
+                    }
+                }
+            }
             if passthrough {
                 return proxy_request(
                     state,
@@ -280,7 +316,7 @@ async fn handle(
             } else if response.delay_ms > 0 {
                 tokio::time::sleep(Duration::from_millis(response.delay_ms)).await;
             }
-            response_tuple(rule_name, &response, &params).await
+            response_tuple(rule_name, &response, method, &path, &params).await
         }
         None => (
             404,
@@ -341,7 +377,7 @@ async fn finish_partial_response(
     params: &std::collections::HashMap<String, String>,
 ) -> Result<Response<MockResponseBody>, std::io::Error> {
     let (status, body_bytes, headers, matched_name) =
-        response_tuple(rule_name, response, params).await;
+        response_tuple(rule_name, response, method, &path, params).await;
     let entry = MockLog {
         method: format!("{method:?}").to_uppercase(),
         path,
@@ -370,9 +406,11 @@ fn full_body(bytes: Bytes) -> MockResponseBody {
 async fn response_tuple(
     rule_name: String,
     response: &super::MockResponse,
+    method: Method,
+    path: &str,
     params: &std::collections::HashMap<String, String>,
 ) -> (u16, Bytes, Vec<(String, String)>, Option<String>) {
-    let (body, default_ct) = render_response_body(&response.body, params);
+    let (body, default_ct) = render_response_body(response, method, path, params);
     let mut headers = response.headers.clone();
     if let Some(ct) = default_ct {
         let already = headers
@@ -697,10 +735,25 @@ fn json_error(status: u16, message: &str) -> Response<MockResponseBody> {
 }
 
 fn render_response_body(
-    body: &MockBody,
+    response: &super::MockResponse,
+    method: Method,
+    path: &str,
     params: &std::collections::HashMap<String, String>,
 ) -> (Bytes, Option<String>) {
-    match body {
+    if let Some(script) = &response.body_script {
+        return match ScriptRuntime::new().render_mock_body(script, method, path, params) {
+            Ok(rendered) => (
+                Bytes::from(rendered.into_bytes()),
+                Some("application/json".into()),
+            ),
+            Err(e) => (
+                Bytes::from(format!(r#"{{"error":"mock body script failed: {e}"}}"#)),
+                Some("application/json".into()),
+            ),
+        };
+    }
+
+    match &response.body {
         MockBody::None => (Bytes::new(), None),
         MockBody::Text { content_type, text } => {
             let rendered = render_body(text, params);
@@ -811,11 +864,13 @@ mod tests {
                     text: r#"{"id":"{{params.id}}","name":"Alice"}"#.into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
         let listener = TcpListener::bind(addr).await.unwrap();
@@ -874,11 +929,13 @@ mod tests {
                     text: "User-agent: *".into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -913,6 +970,7 @@ mod tests {
                     text: r#"{"id":"{{params.id}}","state":"default"}"#.into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![super::super::MockScenario {
                 name: "missing".into(),
@@ -924,11 +982,13 @@ mod tests {
                         text: r#"{"id":"{{params.id}}","error":"missing"}"#.into(),
                     },
                     delay_ms: 0,
+                    body_script: None,
                 },
             }],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1035,6 +1095,7 @@ response:
                     text: r#"{"id":"{{params.id}}"}"#.into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![super::super::MockScenario {
                 name: "missing".into(),
@@ -1044,11 +1105,13 @@ response:
                     headers: vec![],
                     body: MockBody::None,
                     delay_ms: 0,
+                    body_script: None,
                 },
             }],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1119,6 +1182,7 @@ response:
                     text: r#"{"state":"default"}"#.into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![super::super::MockScenario {
                 name: "missing".into(),
@@ -1130,11 +1194,13 @@ response:
                         text: r#"{"state":"missing"}"#.into(),
                     },
                     delay_ms: 0,
+                    body_script: None,
                 },
             }],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1183,6 +1249,7 @@ response:
                     text: r#"{"ok":true}"#.into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: Some(super::super::MockFault::Config(MockFaultConfig {
@@ -1192,6 +1259,7 @@ response:
             })),
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1223,6 +1291,7 @@ response:
                     text: "ok".into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: Some(super::super::MockFault::Config(MockFaultConfig {
@@ -1232,6 +1301,7 @@ response:
             })),
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1264,6 +1334,7 @@ response:
             )),
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1297,11 +1368,13 @@ response:
                     text: "abcdef".into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: Some(super::super::MockFault::Kind(MockFaultKind::PartialBody)),
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1332,6 +1405,7 @@ response:
             fault: Some(super::super::MockFault::Kind(MockFaultKind::Timeout)),
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1370,11 +1444,13 @@ response:
                     text: r#"{"id":"{{params.id}}","source":"upstream"}"#.into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }];
         let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let upstream_addr = upstream_listener.local_addr().unwrap();
@@ -1394,6 +1470,7 @@ response:
             fault: None,
             passthrough: true,
             upstream_url: Some(format!("http://{upstream_addr}")),
+            condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let bound = listener.local_addr().unwrap();
@@ -1417,5 +1494,48 @@ response:
         let _ = upstream_tx.send(());
         let _ = handle.await;
         let _ = upstream_handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_condition_and_body_generator_scripts_are_applied() {
+        let rules = vec![MockRule {
+            name: "scripted".into(),
+            method: Method::Get,
+            path: "/users/:id".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 200,
+                headers: vec![],
+                body: MockBody::None,
+                delay_ms: 0,
+                body_script: Some(r#"`{"id":"${request.params["id"]}","scripted":true}`"#.into()),
+            },
+            scenarios: vec![],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
+            condition_script: Some(r#"request.params["id"] == "42""#.into()),
+        }];
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let handle = tokio::spawn(async move { run(rules, bound, Some(rx), None).await });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let resp = reqwest::get(format!("http://{bound}/users/42"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(resp.text().await.unwrap(), r#"{"id":"42","scripted":true}"#);
+
+        let resp = reqwest::get(format!("http://{bound}/users/7"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 404);
+
+        let _ = tx.send(());
+        let _ = handle.await;
     }
 }

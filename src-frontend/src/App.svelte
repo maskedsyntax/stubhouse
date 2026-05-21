@@ -4,6 +4,7 @@
   import RequestPane from "./lib/RequestPane.svelte";
   import ResponsePanel from "./lib/ResponsePanel.svelte";
   import Sidebar from "./lib/Sidebar.svelte";
+  import TestResultsPanel from "./lib/TestResultsPanel.svelte";
   import { workspace } from "./lib/workspaceStore.svelte";
 
   function defaultReq(): Compose {
@@ -138,6 +139,7 @@
     </header>
 
     <MockServerPanel />
+    <TestResultsPanel />
 
     <div class="flex flex-1 flex-col gap-4 overflow-auto p-4">
       <RequestPane

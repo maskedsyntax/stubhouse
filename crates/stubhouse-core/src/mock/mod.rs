@@ -37,6 +37,8 @@ pub struct MockRule {
     pub passthrough: bool,
     #[serde(default)]
     pub upstream_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub condition_script: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -71,6 +73,8 @@ pub struct MockResponse {
     /// Static delay in milliseconds before responding.
     #[serde(default)]
     pub delay_ms: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub body_script: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -135,6 +139,7 @@ impl Default for MockResponse {
             headers: vec![],
             body: MockBody::None,
             delay_ms: 0,
+            body_script: None,
         }
     }
 }
@@ -344,11 +349,13 @@ mod tests {
                     text: r#"{"id":"{{params.id}}"}"#.into(),
                 },
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         };
         let y = serde_yaml::to_string(&rule).unwrap();
         let back: MockRule = serde_yaml::from_str(&y).unwrap();

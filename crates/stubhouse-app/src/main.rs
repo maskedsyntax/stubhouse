@@ -14,8 +14,9 @@ use stubhouse_core::{
         server::{run_with_hot_reload, MockLog, MockReload},
         ScenarioActivation, ScenarioEntry,
     },
-    save_environment, send, to_curl, Compose, Environment, EnvironmentEntry, EnvironmentFile,
-    History, HistoryEntry, RequestDefinition, RequestEntry, Response, Workspace, WorkspaceManifest,
+    run_workspace_tests, save_environment, send, to_curl, Compose, Environment, EnvironmentEntry,
+    EnvironmentFile, History, HistoryEntry, RequestDefinition, RequestEntry, Response,
+    TestRunResult, Workspace, WorkspaceManifest,
 };
 use tauri::{Manager, State};
 
@@ -429,6 +430,13 @@ fn clear_history(state: State<'_, AppState>) -> Result<usize, String> {
     h.clear().map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn run_tests(state: State<'_, AppState>) -> Result<TestRunResult, String> {
+    let root = workspace_root(&state)?;
+    let env = state.active_env.lock().unwrap().clone();
+    run_workspace_tests(&root, env.as_ref()).await
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
@@ -458,6 +466,7 @@ fn main() {
             mock_server_status,
             export_curl,
             import_postman,
+            run_tests,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -147,11 +147,13 @@ mod tests {
                 headers: vec![],
                 body: MockBody::None,
                 delay_ms: 0,
+                body_script: None,
             },
             scenarios: vec![],
             fault: None,
             passthrough: false,
             upstream_url: None,
+            condition_script: None,
         }
     }
 
