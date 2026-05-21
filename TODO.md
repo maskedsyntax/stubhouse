@@ -67,8 +67,8 @@ Top of list is "do next". Mark with `[x]` when done.
 
 - [x] In-memory state store + CRUD simulation (`mock_resources`)
 - [x] Fixture files + seed data
-- [ ] Recording mode (passthrough + capture to YAML)
-- [ ] Sensitive data scrubbing config
+- [x] Recording mode (passthrough + capture to YAML)
+- [x] Sensitive data scrubbing config
 - [ ] Imports: Insomnia v4, OpenAPI 3.x, HAR, Bruno `.bru`
 - [ ] Exports: OpenAPI 3.x, Markdown docs, Docker Compose (headless mock service)
 - [ ] OpenAPI spec sync + response schema drift detection

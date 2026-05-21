@@ -153,6 +153,7 @@ mod tests {
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }
     }

@@ -37,8 +37,58 @@ pub struct MockRule {
     pub passthrough: bool,
     #[serde(default)]
     pub upstream_url: Option<String>,
+    #[serde(default)]
+    pub record: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub condition_script: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct RecordingConfig {
+    #[serde(default = "default_recordings_dir")]
+    pub dir: PathBuf,
+    #[serde(default)]
+    pub scrub: ScrubConfig,
+}
+
+impl Default for RecordingConfig {
+    fn default() -> Self {
+        Self {
+            dir: default_recordings_dir(),
+            scrub: ScrubConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ScrubConfig {
+    #[serde(default = "default_scrub_replacement")]
+    pub replacement: String,
+    #[serde(default)]
+    pub headers: Vec<String>,
+    #[serde(default)]
+    pub json_fields: Vec<String>,
+    #[serde(default)]
+    pub text: Vec<String>,
+}
+
+impl Default for ScrubConfig {
+    fn default() -> Self {
+        Self {
+            replacement: default_scrub_replacement(),
+            headers: vec![],
+            json_fields: vec![],
+            text: vec![],
+        }
+    }
+}
+
+fn default_recordings_dir() -> PathBuf {
+    PathBuf::from("recordings")
+}
+
+fn default_scrub_replacement() -> String {
+    "[REDACTED]".into()
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -259,6 +309,25 @@ pub fn load_resources(
         .collect()
 }
 
+pub fn load_recording_config(workspace_root: &Path) -> Result<RecordingConfig, MockError> {
+    #[derive(Deserialize)]
+    struct RecordingManifest {
+        #[serde(default)]
+        recording: RecordingConfig,
+    }
+
+    let manifest_path = workspace_root.join(crate::workspace::MANIFEST_FILENAME);
+    if !manifest_path.exists() {
+        return Ok(RecordingConfig::default());
+    }
+    let manifest: RecordingManifest = serde_yaml::from_str(&fs::read_to_string(&manifest_path)?)
+        .map_err(|source| MockError::Yaml {
+            file: manifest_path,
+            source,
+        })?;
+    Ok(manifest.recording)
+}
+
 fn resolve_workspace_path(workspace_root: &Path, path: &Path) -> PathBuf {
     if path.is_absolute() {
         path.to_path_buf()
@@ -429,6 +498,7 @@ mod tests {
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         };
         let y = serde_yaml::to_string(&rule).unwrap();

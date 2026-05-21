@@ -1,12 +1,13 @@
 //! Embedded HTTP server that serves mock rules.
 
 use std::collections::HashMap;
+use std::fs;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bytes::Bytes;
 use http_body_util::{combinators::BoxBody, BodyExt, Full};
@@ -20,8 +21,8 @@ use tokio::sync::{oneshot, RwLock};
 
 use super::matcher::{find_match, Match};
 use super::{
-    load_resources, load_rules, render_body, MockBody, MockError, MockFault, MockFaultKind,
-    MockResource, MockRule, ScenarioActivation,
+    load_recording_config, load_resources, load_rules, render_body, MockBody, MockError, MockFault,
+    MockFaultKind, MockResource, MockRule, RecordingConfig, ScenarioActivation, ScrubConfig,
 };
 use crate::{http::Method, script::ScriptRuntime};
 
@@ -48,7 +49,14 @@ pub struct MockReload {
 struct ServerState {
     rules: Arc<RwLock<Vec<MockRule>>>,
     resources: Arc<RwLock<ResourceState>>,
+    recording: Option<RecordingState>,
     logs: Arc<RwLock<Vec<MockLog>>>,
+}
+
+#[derive(Clone)]
+struct RecordingState {
+    workspace_root: PathBuf,
+    config: Arc<RwLock<RecordingConfig>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -88,6 +96,10 @@ pub async fn run_with_hot_reload(
     let state = ServerState::new(
         load_rules(&workspace_root)?,
         ResourceState::from_loaded(load_resources(&workspace_root)?),
+    )
+    .with_recording(
+        workspace_root.clone(),
+        load_recording_config(&workspace_root)?,
     );
     run_dynamic(
         state,
@@ -120,8 +132,14 @@ async fn run_dynamic(
             res = accept => res,
             _ = reload_tick.tick(), if reload.is_some() => {
                 if let Some((workspace_root, on_reload)) = &reload {
-                    reload_workspace(workspace_root, &state.rules, &state.resources, on_reload)
-                        .await;
+                    reload_workspace(
+                        workspace_root,
+                        &state.rules,
+                        &state.resources,
+                        state.recording.as_ref(),
+                        on_reload,
+                    )
+                    .await;
                 }
                 continue;
             }
@@ -157,8 +175,17 @@ impl ServerState {
         Self {
             rules: Arc::new(RwLock::new(rules)),
             resources: Arc::new(RwLock::new(resources)),
+            recording: None,
             logs: Arc::new(RwLock::new(Vec::new())),
         }
+    }
+
+    fn with_recording(mut self, workspace_root: PathBuf, config: RecordingConfig) -> Self {
+        self.recording = Some(RecordingState {
+            workspace_root,
+            config: Arc::new(RwLock::new(config)),
+        });
+        self
     }
 }
 
@@ -190,13 +217,21 @@ async fn reload_workspace(
     workspace_root: &PathBuf,
     rules: &Arc<RwLock<Vec<MockRule>>>,
     resources: &Arc<RwLock<ResourceState>>,
+    recording: Option<&RecordingState>,
     on_reload: &Option<Arc<dyn Fn(MockReload) + Send + Sync>>,
 ) {
-    match (load_rules(workspace_root), load_resources(workspace_root)) {
-        (Ok(next), Ok(next_resources)) => {
+    match (
+        load_rules(workspace_root),
+        load_resources(workspace_root),
+        load_recording_config(workspace_root),
+    ) {
+        (Ok(next), Ok(next_resources), Ok(next_recording)) => {
             let mut guard = rules.write().await;
             let next_resources = ResourceState::from_loaded(next_resources);
             let mut resource_guard = resources.write().await;
+            if let Some(recording) = recording {
+                *recording.config.write().await = next_recording;
+            }
             if *guard != next {
                 let count = next.len();
                 *guard = next;
@@ -213,7 +248,7 @@ async fn reload_workspace(
                 *resource_guard = next_resources;
             }
         }
-        (Err(e), _) | (_, Err(e)) => {
+        (Err(e), _, _) | (_, Err(e), _) | (_, _, Err(e)) => {
             if let Some(callback) = on_reload {
                 callback(MockReload {
                     rules: rules.read().await.len(),
@@ -262,6 +297,7 @@ async fn handle(
                 rule.fault.clone(),
                 rule.passthrough,
                 rule.upstream_url.clone(),
+                rule.record,
                 rule.condition_script.clone(),
                 params,
             )
@@ -282,7 +318,16 @@ async fn handle(
         Vec<(String, String)>,
         Option<String>,
     ) = match matched {
-        Some((rule_name, response, fault, passthrough, upstream_url, condition_script, params)) => {
+        Some((
+            rule_name,
+            response,
+            fault,
+            passthrough,
+            upstream_url,
+            record,
+            condition_script,
+            params,
+        )) => {
             if let Some(condition_script) = &condition_script {
                 let condition = {
                     let runtime = ScriptRuntime::new();
@@ -328,6 +373,7 @@ async fn handle(
                     req,
                     rule_name,
                     upstream_url,
+                    record,
                 )
                 .await;
             }
@@ -515,6 +561,7 @@ async fn proxy_request(
     req: Request<Incoming>,
     rule_name: String,
     upstream_url: Option<String>,
+    record: bool,
 ) -> Result<Response<MockResponseBody>, std::io::Error> {
     let Some(upstream_url) = upstream_url else {
         return finish_response(
@@ -548,7 +595,17 @@ async fn proxy_request(
     };
 
     let (parts, body) = req.into_parts();
-    let body = body
+    let request_headers = parts
+        .headers
+        .iter()
+        .filter_map(|(name, value)| {
+            value
+                .to_str()
+                .ok()
+                .map(|value| (name.as_str().to_string(), value.to_string()))
+        })
+        .collect::<Vec<_>>();
+    let request_body = body
         .collect()
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
@@ -557,7 +614,7 @@ async fn proxy_request(
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     let mut builder = reqwest::Client::new()
         .request(reqwest_method, target)
-        .body(body.to_vec());
+        .body(request_body.to_vec());
     for (name, value) in parts.headers.iter() {
         if !is_hop_by_hop_header(name.as_str()) {
             builder = builder.header(name, value);
@@ -598,6 +655,24 @@ async fn proxy_request(
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
 
+    if record {
+        if let Some(recording) = &state.recording {
+            let capture = RecordingCapture {
+                rule_name: &rule_name,
+                method,
+                path: &path,
+                request_headers: &request_headers,
+                request_body: &request_body,
+                status,
+                response_headers: &headers,
+                response_body: &body,
+            };
+            if let Err(e) = write_recording(recording, capture).await {
+                eprintln!("stubhouse mock recording failed: {e}");
+            }
+        }
+    }
+
     finish_response(
         state,
         log,
@@ -609,6 +684,210 @@ async fn proxy_request(
         Some(rule_name),
     )
     .await
+}
+
+struct RecordingCapture<'a> {
+    rule_name: &'a str,
+    method: Method,
+    path: &'a str,
+    request_headers: &'a [(String, String)],
+    request_body: &'a Bytes,
+    status: u16,
+    response_headers: &'a [(String, String)],
+    response_body: &'a Bytes,
+}
+
+#[derive(serde::Serialize)]
+struct RecordedRule {
+    name: String,
+    method: Method,
+    path: String,
+    response: super::MockResponse,
+    recorded: RecordedMeta,
+}
+
+#[derive(serde::Serialize)]
+struct RecordedMeta {
+    source_rule: String,
+    request: RecordedRequest,
+}
+
+#[derive(serde::Serialize)]
+struct RecordedRequest {
+    headers: Vec<(String, String)>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    body: Option<String>,
+}
+
+async fn write_recording(
+    recording: &RecordingState,
+    capture: RecordingCapture<'_>,
+) -> Result<(), std::io::Error> {
+    let config = recording.config.read().await.clone();
+    let dir = if config.dir.is_absolute() {
+        config.dir.clone()
+    } else {
+        recording.workspace_root.join(&config.dir)
+    };
+    fs::create_dir_all(&dir)?;
+
+    let response_headers = scrub_headers(capture.response_headers, &config.scrub);
+    let request_headers = scrub_headers(capture.request_headers, &config.scrub);
+    let response_text = scrub_text(
+        &String::from_utf8_lossy(capture.response_body),
+        &config.scrub,
+    );
+    let request_text = if capture.request_body.is_empty() {
+        None
+    } else {
+        Some(scrub_text(
+            &String::from_utf8_lossy(capture.request_body),
+            &config.scrub,
+        ))
+    };
+
+    let rule = RecordedRule {
+        name: format!("recorded-{}", slug_for_path(capture.path)),
+        method: capture.method,
+        path: capture.path.to_string(),
+        response: super::MockResponse {
+            status: capture.status,
+            headers: response_headers,
+            body: if serde_json::from_str::<serde_json::Value>(&response_text).is_ok() {
+                MockBody::Json {
+                    text: scrub_json_fields(&response_text, &config.scrub),
+                }
+            } else {
+                MockBody::Text {
+                    content_type: content_type(capture.response_headers)
+                        .unwrap_or("text/plain; charset=utf-8")
+                        .to_string(),
+                    text: response_text,
+                }
+            },
+            delay_ms: 0,
+            body_script: None,
+        },
+        recorded: RecordedMeta {
+            source_rule: capture.rule_name.to_string(),
+            request: RecordedRequest {
+                headers: request_headers,
+                body: request_text,
+            },
+        },
+    };
+
+    let file = dir.join(format!(
+        "{}-{}-{}.yaml",
+        timestamp_millis(),
+        method_label(capture.method).to_ascii_lowercase(),
+        slug_for_path(capture.path)
+    ));
+    let yaml = serde_yaml::to_string(&rule)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    fs::write(file, yaml)
+}
+
+fn scrub_headers(headers: &[(String, String)], scrub: &ScrubConfig) -> Vec<(String, String)> {
+    headers
+        .iter()
+        .map(|(name, value)| {
+            if scrub
+                .headers
+                .iter()
+                .any(|header| header.eq_ignore_ascii_case(name))
+            {
+                (name.clone(), scrub.replacement.clone())
+            } else {
+                (name.clone(), scrub_text(value, scrub))
+            }
+        })
+        .collect()
+}
+
+fn scrub_json_fields(text: &str, scrub: &ScrubConfig) -> String {
+    let Ok(mut value) = serde_json::from_str::<serde_json::Value>(text) else {
+        return scrub_text(text, scrub);
+    };
+    redact_json_fields(&mut value, scrub);
+    serde_json::to_string_pretty(&value).unwrap_or_else(|_| scrub_text(text, scrub))
+}
+
+fn redact_json_fields(value: &mut serde_json::Value, scrub: &ScrubConfig) {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, value) in map.iter_mut() {
+                if scrub
+                    .json_fields
+                    .iter()
+                    .any(|field| field.eq_ignore_ascii_case(key))
+                {
+                    *value = serde_json::Value::String(scrub.replacement.clone());
+                } else {
+                    redact_json_fields(value, scrub);
+                }
+            }
+        }
+        serde_json::Value::Array(items) => {
+            for item in items {
+                redact_json_fields(item, scrub);
+            }
+        }
+        _ => {}
+    }
+}
+
+fn scrub_text(text: &str, scrub: &ScrubConfig) -> String {
+    scrub.text.iter().fold(text.to_string(), |value, pattern| {
+        value.replace(pattern, &scrub.replacement)
+    })
+}
+
+fn content_type(headers: &[(String, String)]) -> Option<&str> {
+    headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+        .map(|(_, value)| value.as_str())
+}
+
+fn timestamp_millis() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
+
+fn method_label(method: Method) -> &'static str {
+    match method {
+        Method::Get => "GET",
+        Method::Post => "POST",
+        Method::Put => "PUT",
+        Method::Patch => "PATCH",
+        Method::Delete => "DELETE",
+        Method::Head => "HEAD",
+        Method::Options => "OPTIONS",
+    }
+}
+
+fn slug_for_path(path: &str) -> String {
+    let slug = path
+        .trim_matches('/')
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .trim_matches('-')
+        .to_string();
+    if slug.is_empty() {
+        "root".into()
+    } else {
+        slug
+    }
 }
 
 fn passthrough_target(upstream_url: &str, path_and_query: &str) -> Result<String, url::ParseError> {
@@ -1180,6 +1459,7 @@ mod tests {
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let addr: SocketAddr = "127.0.0.1:0".parse().unwrap();
@@ -1245,6 +1525,7 @@ mod tests {
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1298,6 +1579,7 @@ mod tests {
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1421,6 +1703,7 @@ response:
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1510,6 +1793,7 @@ response:
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1569,6 +1853,7 @@ response:
             })),
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1611,6 +1896,7 @@ response:
             })),
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1644,6 +1930,7 @@ response:
             )),
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1684,6 +1971,7 @@ response:
             fault: Some(super::super::MockFault::Kind(MockFaultKind::PartialBody)),
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1715,6 +2003,7 @@ response:
             fault: Some(super::super::MockFault::Kind(MockFaultKind::Timeout)),
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1760,6 +2049,7 @@ response:
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: None,
         }];
         let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1780,6 +2070,7 @@ response:
             fault: None,
             passthrough: true,
             upstream_url: Some(format!("http://{upstream_addr}")),
+            record: false,
             condition_script: None,
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1807,6 +2098,123 @@ response:
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn recording_mode_captures_passthrough_with_scrubbing() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("collections/api/mocks")).unwrap();
+        fs::write(
+            dir.path().join("workspace.yaml"),
+            r#"
+name: demo
+version: "1"
+recording:
+  dir: recordings
+  scrub:
+    headers:
+      - Authorization
+    json_fields:
+      - token
+    text:
+      - secret-token
+"#,
+        )
+        .unwrap();
+
+        let upstream_rules = vec![MockRule {
+            name: "upstream-token".into(),
+            method: Method::Get,
+            path: "/token".into(),
+            priority: 0,
+            response: MockResponse {
+                status: 200,
+                headers: vec![("X-Upstream".into(), "yes".into())],
+                body: MockBody::Json {
+                    text: r#"{"token":"secret-token","ok":true}"#.into(),
+                },
+                delay_ms: 0,
+                body_script: None,
+            },
+            scenarios: vec![],
+            fault: None,
+            passthrough: false,
+            upstream_url: None,
+            record: false,
+            condition_script: None,
+        }];
+        let upstream_listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let upstream_addr = upstream_listener.local_addr().unwrap();
+        drop(upstream_listener);
+        let (upstream_tx, upstream_rx) = oneshot::channel();
+        let upstream_handle = tokio::spawn(async move {
+            run(upstream_rules, upstream_addr, Some(upstream_rx), None).await
+        });
+
+        fs::write(
+            dir.path().join("collections/api/mocks/token.yaml"),
+            format!(
+                r#"
+name: proxy-token
+method: GET
+path: /token
+passthrough: true
+upstream_url: http://{upstream_addr}
+record: true
+"#
+            ),
+        )
+        .unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let root = dir.path().to_path_buf();
+        let handle =
+            tokio::spawn(
+                async move { run_with_hot_reload(root, bound, Some(rx), None, None).await },
+            );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let resp = reqwest::Client::new()
+            .get(format!("http://{bound}/token"))
+            .header("Authorization", "Bearer secret-token")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        assert_eq!(
+            resp.text().await.unwrap(),
+            r#"{"token":"secret-token","ok":true}"#
+        );
+
+        let recordings_dir = dir.path().join("recordings");
+        let mut recording = None;
+        for _ in 0..20 {
+            if recordings_dir.exists() {
+                let files = fs::read_dir(&recordings_dir)
+                    .unwrap()
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap();
+                if let Some(file) = files.first() {
+                    recording = Some(fs::read_to_string(file.path()).unwrap());
+                    break;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
+        let recording = recording.expect("recording file should be written");
+        assert!(recording.contains("proxy-token"));
+        assert!(recording.contains("authorization"));
+        assert!(recording.contains("[REDACTED]"));
+        assert!(!recording.contains("secret-token"));
+
+        let _ = tx.send(());
+        let _ = upstream_tx.send(());
+        let _ = handle.await;
+        let _ = upstream_handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
     async fn mock_condition_and_body_generator_scripts_are_applied() {
         let rules = vec![MockRule {
             name: "scripted".into(),
@@ -1824,6 +2232,7 @@ response:
             fault: None,
             passthrough: false,
             upstream_url: None,
+            record: false,
             condition_script: Some(r#"request.params["id"] == "42""#.into()),
         }];
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
