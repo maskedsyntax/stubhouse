@@ -66,6 +66,7 @@
 </script>
 
 <aside class="flex h-full w-64 flex-col border-r ui-divider bg-neutral-950">
+  <div data-tauri-drag-region class="native-titlebar-spacer"></div>
   <div class="flex items-center justify-between border-b ui-divider px-3 py-2.5">
     <div class="min-w-0 flex-1">
       {#if workspace.info}

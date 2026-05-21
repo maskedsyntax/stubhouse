@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ResponseDto } from "./api";
+  import SyntaxBlock from "./SyntaxBlock.svelte";
 
   type Props = {
     response: ResponseDto | null;
@@ -33,6 +34,19 @@
       return body;
     }
   }
+
+  function responseLanguage(response: ResponseDto): "json" | "text" {
+    const contentType = response.headers
+      .find(([key]) => key.toLowerCase() === "content-type")?.[1]
+      .toLowerCase() ?? "";
+    if (contentType.includes("json")) return "json";
+    try {
+      JSON.parse(response.body);
+      return "json";
+    } catch {
+      return "text";
+    }
+  }
 </script>
 
 <section class="ui-panel flex flex-1 flex-col overflow-hidden">
@@ -44,6 +58,7 @@
       <pre class="whitespace-pre-wrap text-sm leading-6 text-red-200">{error}</pre>
     </div>
   {:else if response}
+    {@const language = responseLanguage(response)}
     <header class="flex items-center gap-3 border-b ui-divider px-3 py-2 text-sm">
       <span class="rounded-md border px-2 py-0.5 font-semibold {statusTone(response.status)}">
         {response.status}
@@ -69,7 +84,11 @@
     </div>
 
     {#if activeTab === "body"}
-      <pre class="flex-1 overflow-auto p-4 text-sm leading-6 text-neutral-50">{tryPrettyJson(response.body)}</pre>
+      <SyntaxBlock
+        code={language === "json" ? tryPrettyJson(response.body) : response.body}
+        {language}
+        class="flex-1 overflow-auto whitespace-pre-wrap p-4 font-mono text-sm leading-6 text-neutral-50"
+      />
     {:else}
       <div class="flex-1 overflow-auto">
         <table class="w-full text-sm">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Body } from "./api";
   import KeyValueTable from "./KeyValueTable.svelte";
+  import SyntaxBlock from "./SyntaxBlock.svelte";
 
   type Props = { body: Body };
   let { body = $bindable() }: Props = $props();
@@ -23,6 +24,7 @@
 
   let formRows = $state<Array<{ key: string; value: string; enabled: boolean }>>([]);
   let lastSyncedFromBody = $state<string>("");
+  let jsonOverlay: HTMLDivElement | null = $state(null);
 
   $effect(() => {
     if (body.kind === "form") {
@@ -46,6 +48,14 @@
       }
     }
   });
+
+  function syncJsonScroll(e: Event) {
+    if (jsonOverlay) {
+      const textarea = e.currentTarget as HTMLTextAreaElement;
+      jsonOverlay.scrollTop = textarea.scrollTop;
+      jsonOverlay.scrollLeft = textarea.scrollLeft;
+    }
+  }
 </script>
 
 <div class="flex flex-col gap-2 p-3">
@@ -64,12 +74,22 @@
   </div>
 
   {#if body.kind === "json"}
-    <textarea
-      bind:value={body.text}
-      spellcheck="false"
-      placeholder={'{\n  "name": "Alice"\n}'}
-      class="ui-input h-48 resize-y p-3 font-mono leading-6"
-    ></textarea>
+    <div class="relative h-48 overflow-hidden rounded-md border border-neutral-800 bg-neutral-950 focus-within:border-indigo-500">
+      <div bind:this={jsonOverlay} class="pointer-events-none absolute inset-0 overflow-hidden">
+        <SyntaxBlock
+          code={body.text || '{\n  \"name\": \"Alice\"\n}'}
+          language="json"
+          class="whitespace-pre p-3 font-mono text-sm leading-6"
+        />
+      </div>
+      <textarea
+        bind:value={body.text}
+        onscroll={syncJsonScroll}
+        spellcheck="false"
+        placeholder={'{\n  "name": "Alice"\n}'}
+        class="absolute inset-0 h-full w-full resize-none overflow-auto border-0 bg-transparent p-3 font-mono text-sm leading-6 text-transparent caret-indigo-200 outline-none placeholder:text-neutral-600"
+      ></textarea>
+    </div>
   {:else if body.kind === "text"}
     <label class="flex items-center gap-2">
       <span class="ui-label">Content-Type</span>
