@@ -142,6 +142,8 @@ fn build_definition(
     Some(RequestDefinition {
         name: name.to_string(),
         description,
+        pre_request_script: None,
+        post_response_script: None,
         compose: Compose {
             method,
             url,

@@ -25,6 +25,10 @@ pub struct RequestDefinition {
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub description: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pre_request_script: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_response_script: Option<String>,
     #[serde(flatten)]
     pub compose: Compose,
 }
@@ -210,6 +214,8 @@ mod tests {
         RequestDefinition {
             name: name.into(),
             description: "example".into(),
+            pre_request_script: None,
+            post_response_script: None,
             compose: Compose {
                 method: Method::Get,
                 url: "https://example.com/users".into(),

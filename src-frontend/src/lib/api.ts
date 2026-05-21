@@ -66,6 +66,8 @@ export interface RequestEntry {
 export interface RequestDefinition extends Compose {
   name: string;
   description: string;
+  pre_request_script?: string | null;
+  post_response_script?: string | null;
 }
 
 export async function sendRequest(req: Compose): Promise<ResponseDto> {

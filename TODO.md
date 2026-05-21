@@ -51,9 +51,9 @@ Top of list is "do next". Mark with `[x]` when done.
 
 ## Phase 3 — Scripting & Testing
 
-- [ ] Embed `rhai` scripting engine
-- [ ] Pre-request scripts (mutate `request.*`)
-- [ ] Post-response scripts (assertions, variable extraction)
+- [x] Embed `rhai` scripting engine
+- [x] Pre-request scripts (mutate `request.*`)
+- [x] Post-response scripts (assertions, variable extraction)
 - [ ] Mock rule Rhai conditions + body generators
 - [ ] `test(...)` assertion DSL + test runner
 - [ ] `stubhouse test` CLI with JUnit XML output
