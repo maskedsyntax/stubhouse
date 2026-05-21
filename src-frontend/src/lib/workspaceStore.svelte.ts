@@ -83,12 +83,18 @@ function createStore() {
   async function refresh(): Promise<void> {
     if (!state.info) return;
     try {
+      const previousEnv = state.activeEnv?.name;
       state.entries = await listRequests();
       state.history = await listHistory(100);
       state.envs = await listEnvs();
       state.scenarios = await listMockScenarios();
       state.mockServer = await mockServerStatus();
-      state.activeEnv = null;
+      const envToActivate =
+        state.envs.find((env) => env.name === previousEnv)?.name ??
+        state.envs.find((env) => env.name === "mock")?.name ??
+        state.envs.find((env) => env.name === "dev")?.name ??
+        state.envs[0]?.name;
+      state.activeEnv = envToActivate ? await activateEnv(envToActivate) : null;
     } catch (e) {
       state.error = typeof e === "string" ? e : String(e);
     }

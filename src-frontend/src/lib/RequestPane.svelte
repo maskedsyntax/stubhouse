@@ -38,12 +38,27 @@
     );
   }
 
+  function variableNames(s: string): string[] {
+    return Array.from(s.matchAll(/\{\{\s*([^}]+?)\s*\}\}/g), (match) => match[1].trim());
+  }
+
+  const unresolvedUrlVariables = $derived.by(() => {
+    const vars = workspace.activeEnv?.variables ?? {};
+    return variableNames(req.url)
+      .filter((key) => !key.startsWith("$") && !(key in vars))
+      .filter((key, index, keys) => keys.indexOf(key) === index);
+  });
+
   const resolvedUrl = $derived.by(() => {
     const vars = workspace.activeEnv?.variables ?? {};
     if (!req.url.includes("{{")) return null;
     const out = interpolate(req.url, vars);
     return out === req.url ? null : out;
   });
+
+  const canSend = $derived(
+    !loading && req.url.trim().length > 0 && unresolvedUrlVariables.length === 0,
+  );
 
   type Tab = "params" | "headers" | "auth" | "body";
   const tabs: Array<{ id: Tab; label: string }> = [
@@ -112,6 +127,14 @@
 
   async function send() {
     if (!req.url.trim()) return;
+    if (unresolvedUrlVariables.length > 0) {
+      onError(
+        workspace.activeEnv
+          ? `Missing variable${unresolvedUrlVariables.length === 1 ? "" : "s"}: ${unresolvedUrlVariables.join(", ")}`
+          : `Select an environment to resolve: ${unresolvedUrlVariables.join(", ")}`,
+      );
+      return;
+    }
     loading = true;
     try {
       const resp = await sendRequest({ ...req, url: req.url.trim() });
@@ -135,6 +158,16 @@
   let curlFlash = $state<"idle" | "copied" | "error">("idle");
 
   async function copyCurl() {
+    if (unresolvedUrlVariables.length > 0) {
+      curlFlash = "error";
+      onError(
+        workspace.activeEnv
+          ? `Missing variable${unresolvedUrlVariables.length === 1 ? "" : "s"}: ${unresolvedUrlVariables.join(", ")}`
+          : `Select an environment to resolve: ${unresolvedUrlVariables.join(", ")}`,
+      );
+      setTimeout(() => (curlFlash = "idle"), 1500);
+      return;
+    }
     try {
       const snippet = await exportCurl({ ...req, url: req.url.trim() });
       await navigator.clipboard.writeText(snippet);
@@ -239,12 +272,23 @@
 
     <button
       onclick={send}
-      disabled={loading || !req.url.trim()}
+      disabled={!canSend}
       class="rounded bg-indigo-600 px-4 py-1.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
     >
       {loading ? "…" : "Send"}
     </button>
   </div>
+
+  {#if unresolvedUrlVariables.length > 0}
+    <div class="border-b border-amber-900/50 bg-amber-950/30 px-3 py-1.5 text-xs text-amber-200">
+      {#if workspace.activeEnv}
+        Missing variable{unresolvedUrlVariables.length === 1 ? "" : "s"}:
+      {:else}
+        Select an environment to resolve:
+      {/if}
+      <span class="font-mono">{unresolvedUrlVariables.join(", ")}</span>
+    </div>
+  {/if}
 
   {#if resolvedUrl}
     <div class="border-b border-neutral-800 bg-neutral-950/50 px-3 py-1.5 text-xs text-neutral-400">

@@ -10,7 +10,7 @@ Suggested UI test flow:
 
 1. Open the workspace.
 2. Select the `mock` environment.
-3. Start the mock server on `127.0.0.1:4010`.
+3. Start the mock server on `127.0.0.1:4000`.
 4. Send requests from the `catalog`, `orders`, `auth`, and `mock-server` collections.
 5. Switch scenarios between `happy_path`, `empty`, `error`, and `slow`.
 6. Use the test results panel after the mock server is running.
