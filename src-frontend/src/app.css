@@ -19,7 +19,7 @@
       "Helvetica Neue",
       Arial,
       sans-serif;
-    font-size: 15px;
+    font-size: 14px;
     text-rendering: optimizeLegibility;
   }
 
@@ -30,7 +30,7 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     font-feature-settings: "kern" 1, "liga" 1, "calt" 1;
-    line-height: 1.5;
+    line-height: 1.45;
   }
 
   button,
@@ -64,5 +64,51 @@
 
   ::placeholder {
     color: #737373;
+  }
+}
+
+@layer components {
+  .ui-panel {
+    @apply rounded-md border border-neutral-800 bg-neutral-900/90 shadow-sm shadow-black/20;
+  }
+
+  .ui-input {
+    @apply rounded-md border border-neutral-800 bg-neutral-950 px-2.5 py-1.5 text-sm text-neutral-100 outline-none placeholder:text-neutral-600 transition-colors focus:border-indigo-500 disabled:cursor-not-allowed disabled:opacity-55;
+  }
+
+  .ui-button {
+    @apply inline-flex items-center justify-center rounded-md border border-neutral-700 px-3 py-1.5 text-xs font-medium text-neutral-200 transition-colors hover:border-neutral-500 hover:text-neutral-50 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ui-button-primary {
+    @apply inline-flex items-center justify-center rounded-md bg-indigo-600 px-4 py-1.5 text-xs font-semibold uppercase text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ui-button-success {
+    @apply inline-flex items-center justify-center rounded-md border border-emerald-900/70 px-3 py-1.5 text-xs font-medium text-emerald-100 transition-colors hover:border-emerald-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ui-button-danger {
+    @apply inline-flex items-center justify-center rounded-md border border-rose-900/70 px-3 py-1.5 text-xs font-medium text-rose-100 transition-colors hover:border-rose-700 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+
+  .ui-label {
+    @apply text-[11px] font-semibold uppercase text-neutral-500;
+  }
+
+  .ui-tab {
+    @apply flex items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-[11px] font-semibold uppercase text-neutral-400 transition-colors hover:text-neutral-200;
+  }
+
+  .ui-tab-active {
+    @apply border-indigo-500 text-neutral-100;
+  }
+
+  .ui-empty {
+    @apply text-sm text-neutral-500;
+  }
+
+  .ui-divider {
+    @apply border-neutral-800;
   }
 }

@@ -19,7 +19,7 @@
 </script>
 
 <div class="flex flex-col">
-  <div class="grid grid-cols-[32px_1fr_1fr_32px] gap-1 border-b border-neutral-800 px-2 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-400">
+  <div class="grid grid-cols-[32px_1fr_1fr_32px] gap-1 border-b ui-divider px-2 py-1.5 ui-label">
     <span></span>
     <span>{keyPlaceholder}</span>
     <span>{valuePlaceholder}</span>
@@ -37,18 +37,18 @@
         bind:value={row.key}
         type="text"
         placeholder={keyPlaceholder}
-        class="rounded border border-transparent bg-neutral-950 px-2 py-1.5 text-sm text-neutral-50 outline-none placeholder:text-neutral-500 focus:border-indigo-500"
+        class="ui-input border-transparent"
       />
       <input
         bind:value={row.value}
         type="text"
         placeholder={valuePlaceholder}
-        class="rounded border border-transparent bg-neutral-950 px-2 py-1.5 text-sm text-neutral-50 outline-none placeholder:text-neutral-500 focus:border-indigo-500"
+        class="ui-input border-transparent"
       />
       <button
         onclick={() => removeRow(i)}
         aria-label="remove row"
-        class="rounded p-1 text-neutral-500 hover:bg-neutral-800 hover:text-red-300"
+        class="rounded-md p-1 text-neutral-500 transition-colors hover:bg-neutral-800 hover:text-red-300"
       >
         ×
       </button>
@@ -57,7 +57,7 @@
 
   <button
     onclick={addRow}
-    class="mt-2 self-start rounded border border-neutral-800 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-300 hover:border-indigo-600 hover:text-indigo-300"
+    class="ui-button mt-2 self-start uppercase"
   >
     + Add row
   </button>

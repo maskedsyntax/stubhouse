@@ -35,17 +35,17 @@
   }
 </script>
 
-<section class="flex flex-1 flex-col overflow-hidden rounded-md border border-neutral-800 bg-neutral-900/90 shadow-sm shadow-black/20">
+<section class="ui-panel flex flex-1 flex-col overflow-hidden">
   {#if loading}
-    <div class="flex flex-1 items-center justify-center text-sm text-neutral-400">sending…</div>
+    <div class="flex flex-1 items-center justify-center ui-empty">sending…</div>
   {:else if error}
     <div class="flex flex-1 flex-col gap-2 p-4">
-      <div class="text-xs font-medium uppercase tracking-wide text-red-300">Error</div>
+      <div class="ui-label text-red-300">Error</div>
       <pre class="whitespace-pre-wrap text-sm leading-6 text-red-200">{error}</pre>
     </div>
   {:else if response}
-    <header class="flex items-center gap-3 border-b border-neutral-800 px-3 py-2 text-sm">
-      <span class="rounded border px-2 py-0.5 font-semibold {statusTone(response.status)}">
+    <header class="flex items-center gap-3 border-b ui-divider px-3 py-2 text-sm">
+      <span class="rounded-md border px-2 py-0.5 font-semibold {statusTone(response.status)}">
         {response.status}
       </span>
       <span class="text-neutral-300">{response.elapsed_ms} ms</span>
@@ -54,14 +54,14 @@
       <span class="ml-auto text-neutral-500">{response.headers.length} headers</span>
     </header>
 
-    <div class="flex items-center gap-1 border-b border-neutral-800 px-2 pt-1">
+    <div class="flex items-center gap-1 border-b ui-divider px-2 pt-1">
       {#each [{ id: "body" as Tab, label: "Body" }, { id: "headers" as Tab, label: "Headers" }] as t (t.id)}
         <button
           onclick={() => (activeTab = t.id)}
-          class="border-b-2 px-3 py-2 text-xs font-medium uppercase tracking-wide
+          class="ui-tab
                  {activeTab === t.id
-                   ? 'border-indigo-500 text-neutral-100'
-                   : 'border-transparent text-neutral-400 hover:text-neutral-200'}"
+                   ? 'ui-tab-active'
+                   : ''}"
         >
           {t.label}
         </button>
@@ -85,7 +85,7 @@
       </div>
     {/if}
   {:else}
-    <div class="flex flex-1 items-center justify-center text-sm text-neutral-500">
+    <div class="flex flex-1 items-center justify-center ui-empty">
       no response yet
     </div>
   {/if}

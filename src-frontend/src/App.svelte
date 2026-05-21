@@ -88,8 +88,8 @@
   <Sidebar onLoad={loadDef} onReplay={loadReplay} />
 
   <div class="flex flex-1 flex-col">
-    <header class="flex items-center justify-between border-b border-neutral-800 px-4 py-3">
-      <div class="text-xs font-medium uppercase tracking-wide text-neutral-400">
+    <header class="flex items-center justify-between border-b ui-divider bg-neutral-950/80 px-4 py-3">
+      <div class="text-[11px] font-semibold uppercase text-neutral-400">
         StubHouse <span class="text-neutral-700">·</span>
         <span class="text-neutral-300">Phase 1 slice C</span>
       </div>
@@ -97,9 +97,9 @@
       {#if workspace.info}
         <div class="flex items-center gap-3">
           <label class="flex items-center gap-2 text-xs text-neutral-300">
-            <span class="font-medium uppercase tracking-wide text-neutral-500">scenario</span>
+            <span class="ui-label">scenario</span>
             <select
-              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
+              class="ui-input py-1 text-xs"
               value={workspace.scenarios.find((scenario) => scenario.active_rules > 0)?.name ?? ""}
               onchange={onScenarioChange}
               disabled={workspace.scenarios.length === 0}
@@ -115,14 +115,14 @@
           </label>
 
           <label class="flex items-center gap-2 text-xs text-neutral-300">
-            <span class="font-medium uppercase tracking-wide text-neutral-500">env</span>
+            <span class="ui-label">env</span>
             {#if workspace.activeEnv}
               <span class="inline-block h-2 w-2 rounded-full {envColor(workspace.activeEnv.name)}"></span>
             {:else}
               <span class="inline-block h-2 w-2 rounded-full bg-neutral-700"></span>
             {/if}
             <select
-              class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-xs text-neutral-100 hover:border-neutral-700 focus:border-indigo-600 focus:outline-none"
+              class="ui-input py-1 text-xs"
               value={workspace.activeEnv?.name ?? ""}
               onchange={onEnvChange}
               disabled={workspace.envs.length === 0}

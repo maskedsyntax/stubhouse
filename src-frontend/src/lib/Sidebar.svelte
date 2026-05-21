@@ -65,14 +65,14 @@
   }
 </script>
 
-<aside class="flex h-full w-64 flex-col border-r border-neutral-800 bg-neutral-950">
-  <div class="flex items-center justify-between border-b border-neutral-800 px-3 py-2">
+<aside class="flex h-full w-64 flex-col border-r ui-divider bg-neutral-950">
+  <div class="flex items-center justify-between border-b ui-divider px-3 py-2.5">
     <div class="min-w-0 flex-1">
       {#if workspace.info}
         <div class="truncate text-sm font-semibold text-neutral-100">
           {workspace.info.manifest.name}
         </div>
-        <div class="truncate text-xs text-neutral-500" title={workspace.info.root}>
+        <div class="truncate font-mono text-[11px] text-neutral-500" title={workspace.info.root}>
           {workspace.info.root}
         </div>
       {:else}
@@ -84,7 +84,7 @@
         <button
           onclick={importPostmanFile}
           title="Import Postman v2.1 collection (.json)"
-          class="rounded border border-neutral-800 px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-300 hover:border-indigo-600 hover:text-indigo-300"
+          class="ui-button px-2.5 py-1 text-[11px] uppercase"
         >
           Import
         </button>
@@ -92,7 +92,7 @@
       <button
         onclick={pickWorkspace}
         title="Open workspace…"
-        class="rounded border border-neutral-800 px-2.5 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-300 hover:border-indigo-600 hover:text-indigo-300"
+        class="ui-button px-2.5 py-1 text-[11px] uppercase"
       >
         Open
       </button>
@@ -100,7 +100,7 @@
   </div>
 
   {#if importFlash}
-    <div class="border-b border-neutral-800 bg-emerald-950/40 px-3 py-1.5 text-xs text-emerald-200">
+    <div class="border-b ui-divider bg-emerald-950/40 px-3 py-1.5 text-xs text-emerald-200">
       {importFlash}
     </div>
   {/if}
@@ -123,7 +123,7 @@
     {:else}
       {#each grouped as [collection, items] (collection)}
         <div class="px-2 pb-1 pt-3">
-          <div class="px-1 text-xs font-medium uppercase tracking-wide text-neutral-400">
+        <div class="ui-label px-1">
             {collection}
           </div>
           <ul>
@@ -131,7 +131,7 @@
               <li>
                 <button
                   onclick={() => handleClick(entry.id)}
-                  class="block w-full truncate rounded px-2 py-1.5 text-left text-sm
+                  class="block w-full truncate rounded-md px-2 py-1.5 text-left text-sm transition-colors
                          {workspace.activeId === entry.id
                            ? 'bg-indigo-600/20 text-indigo-200'
                            : 'text-neutral-200 hover:bg-neutral-800'}"
@@ -147,14 +147,14 @@
     {/if}
 
     {#if workspace.info}
-      <div class="mt-3 border-t border-neutral-800 px-2 pb-2 pt-3">
+      <div class="mt-3 border-t ui-divider px-2 pb-2 pt-3">
         <div class="flex items-center justify-between px-1">
-          <div class="text-xs font-medium uppercase tracking-wide text-neutral-400">History</div>
+          <div class="ui-label">History</div>
           {#if workspace.history.length > 0}
             <button
               onclick={confirmClear}
               title="Clear history"
-              class="text-xs font-medium uppercase tracking-wide text-neutral-500 hover:text-red-300"
+              class="text-[11px] font-semibold uppercase text-neutral-500 hover:text-red-300"
             >
               Clear
             </button>
@@ -170,7 +170,7 @@
               <li>
                 <button
                   onclick={() => handleHistoryClick(h.id)}
-                  class="block w-full rounded px-2 py-1 text-left hover:bg-neutral-800"
+                  class="block w-full rounded-md px-2 py-1 text-left transition-colors hover:bg-neutral-800"
                   title={h.url}
                 >
                   <div class="flex items-center gap-2">

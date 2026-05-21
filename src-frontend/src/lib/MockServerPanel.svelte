@@ -29,20 +29,20 @@
 {#if workspace.info}
   <section class="border-b border-neutral-900 bg-neutral-950/70 px-4 py-3">
     <div class="flex flex-wrap items-center gap-3">
-      <div class="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-neutral-400">
+      <div class="flex items-center gap-2 ui-label">
         <span class="h-2 w-2 rounded-full {workspace.mockServer?.running ? 'bg-emerald-500' : 'bg-neutral-700'}"></span>
         Mock server
       </div>
 
       <input
-        class="w-32 rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus:border-indigo-600 focus:outline-none"
+        class="ui-input w-32"
         bind:value={bind}
         disabled={workspace.mockServer?.running || busy}
         aria-label="Mock server bind address"
       />
 
       <input
-        class="w-20 rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm text-neutral-100 focus:border-indigo-600 focus:outline-none"
+        class="ui-input w-20"
         type="number"
         min="1"
         max="65535"
@@ -53,7 +53,7 @@
 
       {#if workspace.mockServer?.running}
         <button
-          class="rounded border border-rose-900/70 px-3 py-1.5 text-xs font-medium text-rose-100 hover:border-rose-700 disabled:opacity-50"
+          class="ui-button-danger"
           onclick={stop}
           disabled={busy}
         >
@@ -64,7 +64,7 @@
         </span>
       {:else}
         <button
-          class="rounded border border-emerald-900/70 px-3 py-1.5 text-xs font-medium text-emerald-100 hover:border-emerald-700 disabled:opacity-50"
+          class="ui-button-success"
           onclick={start}
           disabled={busy}
         >

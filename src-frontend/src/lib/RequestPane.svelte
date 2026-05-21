@@ -227,35 +227,35 @@
   }
 </script>
 
-<section class="flex flex-col gap-0 rounded-md border border-neutral-800 bg-neutral-900/90 shadow-sm shadow-black/20">
-  <div class="flex items-center gap-2 border-b border-neutral-800 px-2 py-2">
+<section class="ui-panel flex flex-col gap-0">
+  <div class="flex items-center gap-2 border-b ui-divider px-2 py-2">
     <input
       bind:value={name}
       type="text"
       placeholder="Untitled request"
-      class="flex-1 rounded border border-transparent bg-transparent px-2 py-1 text-[15px] font-semibold text-neutral-50 outline-none hover:border-neutral-800 focus:border-indigo-500"
+      class="flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[15px] font-semibold text-neutral-50 outline-none transition-colors hover:border-neutral-800 focus:border-indigo-500"
     />
     <button
       onclick={copyCurl}
       disabled={!req.url.trim()}
       title="Copy as cURL"
-      class="rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium uppercase tracking-wide hover:border-indigo-500 hover:text-indigo-200 disabled:opacity-40
+      class="ui-button uppercase
              {curlFlash === 'copied' ? 'text-emerald-300' : curlFlash === 'error' ? 'text-red-300' : 'text-neutral-200'}"
     >
       {curlFlash === "copied" ? "Copied" : curlFlash === "error" ? "Failed" : "cURL"}
     </button>
     <button
       onclick={handleSaveClick}
-      class="rounded border border-neutral-700 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-200 hover:border-indigo-500 hover:text-indigo-200"
+      class="ui-button uppercase"
     >
       Save
     </button>
   </div>
 
-  <div class="flex items-center gap-2 border-b border-neutral-800 p-2">
+  <div class="flex items-center gap-2 border-b ui-divider p-2">
     <select
       bind:value={req.method}
-      class="rounded border border-neutral-700 bg-neutral-950 px-2.5 py-1.5 text-sm font-semibold text-neutral-50 outline-none focus:border-indigo-500"
+      class="ui-input w-24 font-semibold"
     >
       {#each methods as m (m)}
         <option value={m}>{m}</option>
@@ -267,13 +267,13 @@
       onkeydown={onKey}
       type="text"
       placeholder="https://api.example.com/users"
-      class="flex-1 rounded border border-neutral-700 bg-neutral-950 px-3 py-1.5 text-[15px] text-neutral-50 outline-none placeholder:text-neutral-500 focus:border-indigo-500"
+      class="ui-input flex-1 px-3 text-[15px]"
     />
 
     <button
       onclick={send}
       disabled={!canSend}
-      class="rounded bg-indigo-600 px-4 py-1.5 text-sm font-semibold uppercase tracking-wide text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-40"
+      class="ui-button-primary"
     >
       {loading ? "…" : "Send"}
     </button>
@@ -291,44 +291,44 @@
   {/if}
 
   {#if resolvedUrl}
-    <div class="border-b border-neutral-800 bg-neutral-950/50 px-3 py-1.5 text-xs text-neutral-400">
+    <div class="border-b ui-divider bg-neutral-950/50 px-3 py-1.5 text-xs text-neutral-400">
       <span class="uppercase tracking-wide text-neutral-500">→</span>
       <span class="ml-1 font-mono text-neutral-300">{resolvedUrl}</span>
     </div>
   {/if}
 
   {#if showSaveDialog}
-    <div class="flex flex-col gap-2 border-b border-neutral-800 bg-neutral-950/60 p-3">
-      <div class="text-xs uppercase tracking-wide text-neutral-400">
+    <div class="flex flex-col gap-2 border-b ui-divider bg-neutral-950/60 p-3">
+      <div class="ui-label">
         Save request to workspace
       </div>
       <div class="grid grid-cols-[1fr_1fr_auto_auto] items-center gap-2">
         <label class="flex flex-col gap-1">
-          <span class="text-xs uppercase tracking-wide text-neutral-400">Collection</span>
+          <span class="ui-label">Collection</span>
           <input
             bind:value={saveCollection}
             placeholder="users"
-            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+            class="ui-input"
           />
         </label>
         <label class="flex flex-col gap-1">
-          <span class="text-xs uppercase tracking-wide text-neutral-400">Slug</span>
+          <span class="ui-label">Slug</span>
           <input
             bind:value={saveSlug}
             placeholder="get-users"
-            class="rounded border border-neutral-800 bg-neutral-950 px-2 py-1.5 text-sm outline-none focus:border-indigo-500"
+            class="ui-input"
           />
         </label>
         <button
           onclick={confirmSave}
           disabled={!saveCollection.trim() || !saveSlug.trim()}
-          class="self-end rounded bg-indigo-600 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-white hover:bg-indigo-500 disabled:opacity-40"
+          class="ui-button-primary self-end px-3"
         >
           Save
         </button>
         <button
           onclick={() => (showSaveDialog = false)}
-          class="self-end rounded border border-neutral-800 px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-neutral-300 hover:border-neutral-700 hover:text-neutral-100"
+          class="ui-button self-end uppercase"
         >
           Cancel
         </button>
@@ -339,14 +339,14 @@
     </div>
   {/if}
 
-  <div class="flex items-center gap-1 border-b border-neutral-800 px-2 pt-1">
+  <div class="flex items-center gap-1 border-b ui-divider px-2 pt-1">
     {#each tabs as tab (tab.id)}
       <button
         onclick={() => (activeTab = tab.id)}
-        class="flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium uppercase tracking-wide
+        class="ui-tab
                {activeTab === tab.id
-                 ? 'border-indigo-500 text-neutral-100'
-                 : 'border-transparent text-neutral-400 hover:text-neutral-200'}"
+                 ? 'ui-tab-active'
+                 : ''}"
       >
         {tab.label}
         {#if hasBadge(tab.id)}
