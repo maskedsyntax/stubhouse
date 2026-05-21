@@ -10,7 +10,7 @@ pub mod script;
 pub mod test_runner;
 pub mod workspace;
 
-pub use codegen::to_curl;
+pub use codegen::{to_curl, to_openapi_yaml};
 pub use compose::{ApiKeyLocation, Auth, Body, Compose, ComposeError};
 pub use environment::{
     list_environments, load_environment, save_environment, Environment, EnvironmentEntry,
@@ -18,7 +18,7 @@ pub use environment::{
 };
 pub use history::{History, HistoryEntry, HistoryError, HistoryRecord};
 pub use http::{send, Method, Request, RequestError, Response};
-pub use import::{from_postman_v21, ImportError, ImportedRequest};
+pub use import::{from_openapi3, from_postman_v21, ImportError, ImportedRequest};
 pub use interpolate::{interpolate_compose, interpolate_string};
 pub use script::{ScriptContext, ScriptError, ScriptOutcome, ScriptRuntime};
 pub use test_runner::{junit_xml, run_workspace_tests, TestAssertionResult, TestRunResult};

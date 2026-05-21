@@ -5,12 +5,12 @@ use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use stubhouse_core::{
-    from_postman_v21, interpolate_compose, list_environments, load_environment,
+    from_openapi3, from_postman_v21, interpolate_compose, list_environments, load_environment,
     mock::{
         activate_scenario, list_scenarios, load_rules,
         server::{run_with_hot_reload, MockReload},
     },
-    run_workspace_tests, to_curl, Workspace,
+    run_workspace_tests, to_curl, to_openapi_yaml, ImportedRequest, Workspace,
 };
 
 #[derive(Parser)]
@@ -89,6 +89,11 @@ enum ImportFmt {
         /// Path to the Postman collection JSON
         file: PathBuf,
     },
+    /// Import an OpenAPI 3.x JSON or YAML file
+    Openapi {
+        /// Path to the OpenAPI document
+        file: PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -100,6 +105,12 @@ enum ExportFmt {
         /// Apply this environment's variables before emitting
         #[arg(long)]
         env: Option<String>,
+    },
+    /// Emit an OpenAPI 3.x YAML document for the workspace
+    Openapi {
+        /// Write to this file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
     },
 }
 
@@ -136,12 +147,16 @@ fn run(cli: Cli) -> Result<(), String> {
         Cmd::List => list(&root),
         Cmd::Show { id } => show(&root, &id),
         Cmd::Envs => envs(&root),
-        Cmd::Import {
-            format: ImportFmt::Postman { file },
-        } => import_postman(&root, &file),
+        Cmd::Import { format } => match format {
+            ImportFmt::Postman { file } => import_postman(&root, &file),
+            ImportFmt::Openapi { file } => import_openapi(&root, &file),
+        },
         Cmd::Export {
             format: ExportFmt::Curl { id, env },
         } => export_curl(&root, &id, env.as_deref()),
+        Cmd::Export {
+            format: ExportFmt::Openapi { output },
+        } => export_openapi(&root, output.as_deref()),
         Cmd::Serve { port, bind } => serve(&root, &bind, port),
         Cmd::Scenario { action } => scenario(&root, action),
         Cmd::Test { env, junit } => test_workspace(&root, env.as_deref(), junit.as_deref()),
@@ -340,6 +355,24 @@ fn envs(root: &std::path::Path) -> Result<(), String> {
 }
 
 fn import_postman(root: &std::path::Path, file: &std::path::Path) -> Result<(), String> {
+    let source =
+        std::fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
+    let items = from_postman_v21(&source).map_err(|e| e.to_string())?;
+    import_items(root, file, items)
+}
+
+fn import_openapi(root: &std::path::Path, file: &std::path::Path) -> Result<(), String> {
+    let source =
+        std::fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
+    let items = from_openapi3(&source).map_err(|e| e.to_string())?;
+    import_items(root, file, items)
+}
+
+fn import_items(
+    root: &std::path::Path,
+    file: &std::path::Path,
+    items: Vec<ImportedRequest>,
+) -> Result<(), String> {
     let ws = match Workspace::open(root) {
         Ok(ws) => ws,
         Err(_) => {
@@ -351,9 +384,6 @@ fn import_postman(root: &std::path::Path, file: &std::path::Path) -> Result<(), 
             Workspace::init(root, &name).map_err(|e| e.to_string())?
         }
     };
-    let json =
-        std::fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
-    let items = from_postman_v21(&json).map_err(|e| e.to_string())?;
     for item in &items {
         ws.save_request(&item.collection, &item.slug, &item.def)
             .map_err(|e| e.to_string())?;
@@ -363,6 +393,22 @@ fn import_postman(root: &std::path::Path, file: &std::path::Path) -> Result<(), 
         items.len(),
         file.display()
     );
+    Ok(())
+}
+
+fn export_openapi(root: &std::path::Path, output: Option<&std::path::Path>) -> Result<(), String> {
+    let ws = Workspace::open(root).map_err(|e| e.to_string())?;
+    let mut requests = Vec::new();
+    for entry in ws.list_requests().map_err(|e| e.to_string())? {
+        let def = ws.load_request(&entry.id).map_err(|e| e.to_string())?;
+        requests.push((entry.id, def));
+    }
+    let yaml = to_openapi_yaml(&ws.manifest().name, &requests).map_err(|e| e.to_string())?;
+    if let Some(output) = output {
+        std::fs::write(output, yaml).map_err(|e| format!("write {}: {e}", output.display()))?;
+    } else {
+        print!("{yaml}");
+    }
     Ok(())
 }
 

@@ -1,9 +1,36 @@
+use std::collections::BTreeMap;
+
 use crate::compose::{Compose, ComposeError};
 use crate::http::{Method, Request};
+use crate::workspace::RequestDefinition;
 
 pub fn to_curl(compose: &Compose) -> Result<String, ComposeError> {
     let req = compose.clone().build()?;
     Ok(curl_from_request(&req))
+}
+
+pub fn to_openapi_yaml(
+    title: &str,
+    requests: &[(String, RequestDefinition)],
+) -> Result<String, serde_yaml::Error> {
+    let mut paths = BTreeMap::<String, BTreeMap<String, OpenApiOperationOut>>::new();
+    for (id, request) in requests {
+        let (path, query_from_url) = openapi_path_and_query(&request.compose.url);
+        let operation = operation_from_request(id, request, query_from_url);
+        paths.entry(path).or_default().insert(
+            method_str(request.compose.method).to_ascii_lowercase(),
+            operation,
+        );
+    }
+
+    serde_yaml::to_string(&OpenApiDoc {
+        openapi: "3.0.3".into(),
+        info: OpenApiInfoOut {
+            title: title.to_string(),
+            version: "1.0.0".into(),
+        },
+        paths,
+    })
 }
 
 fn curl_from_request(req: &Request) -> String {
@@ -46,6 +73,176 @@ fn method_str(m: Method) -> &'static str {
     }
 }
 
+fn operation_from_request(
+    id: &str,
+    request: &RequestDefinition,
+    query_from_url: Vec<(String, String)>,
+) -> OpenApiOperationOut {
+    let mut parameters = Vec::new();
+    let mut query = query_from_url;
+    query.extend(request.compose.query.clone());
+    for (name, _) in query {
+        if !name.is_empty() {
+            parameters.push(OpenApiParameterOut {
+                name,
+                location: "query".into(),
+                required: false,
+                schema: OpenApiSchemaOut {
+                    kind: "string".into(),
+                },
+            });
+        }
+    }
+    for (name, _) in &request.compose.headers {
+        if !name.eq_ignore_ascii_case("content-type") {
+            parameters.push(OpenApiParameterOut {
+                name: name.clone(),
+                location: "header".into(),
+                required: false,
+                schema: OpenApiSchemaOut {
+                    kind: "string".into(),
+                },
+            });
+        }
+    }
+
+    OpenApiOperationOut {
+        operation_id: slug_operation_id(id),
+        summary: request.name.clone(),
+        description: if request.description.is_empty() {
+            None
+        } else {
+            Some(request.description.clone())
+        },
+        parameters,
+        request_body: request_body_from_compose(&request.compose),
+        responses: BTreeMap::from([(
+            "200".into(),
+            OpenApiResponseOut {
+                description: "OK".into(),
+            },
+        )]),
+    }
+}
+
+fn request_body_from_compose(compose: &Compose) -> Option<OpenApiRequestBodyOut> {
+    let (content_type, example) = match &compose.body {
+        crate::compose::Body::None => return None,
+        crate::compose::Body::Json { text } => (
+            "application/json".to_string(),
+            serde_json::from_str::<serde_json::Value>(text)
+                .unwrap_or_else(|_| serde_json::Value::Object(Default::default())),
+        ),
+        crate::compose::Body::Text { content_type, text } => (
+            content_type.clone(),
+            serde_json::Value::String(text.clone()),
+        ),
+        crate::compose::Body::Form { fields } => (
+            "application/x-www-form-urlencoded".into(),
+            serde_json::Value::Object(
+                fields
+                    .iter()
+                    .map(|(key, value)| (key.clone(), serde_json::Value::String(value.clone())))
+                    .collect(),
+            ),
+        ),
+    };
+    Some(OpenApiRequestBodyOut {
+        content: BTreeMap::from([(
+            content_type,
+            OpenApiMediaTypeOut {
+                example,
+                schema: OpenApiSchemaOut {
+                    kind: "object".into(),
+                },
+            },
+        )]),
+    })
+}
+
+fn openapi_path_and_query(url: &str) -> (String, Vec<(String, String)>) {
+    match url::Url::parse(url) {
+        Ok(parsed) => (
+            parsed.path().to_string(),
+            parsed
+                .query_pairs()
+                .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                .collect(),
+        ),
+        Err(_) => (url.split('?').next().unwrap_or(url).to_string(), vec![]),
+    }
+}
+
+fn slug_operation_id(id: &str) -> String {
+    let mut out = id
+        .trim_end_matches(".yaml")
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
+        .collect::<String>();
+    while out.contains("__") {
+        out = out.replace("__", "_");
+    }
+    out.trim_matches('_').to_string()
+}
+
+#[derive(serde::Serialize)]
+struct OpenApiDoc {
+    openapi: String,
+    info: OpenApiInfoOut,
+    paths: BTreeMap<String, BTreeMap<String, OpenApiOperationOut>>,
+}
+
+#[derive(serde::Serialize)]
+struct OpenApiInfoOut {
+    title: String,
+    version: String,
+}
+
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpenApiOperationOut {
+    operation_id: String,
+    summary: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    description: Option<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    parameters: Vec<OpenApiParameterOut>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    request_body: Option<OpenApiRequestBodyOut>,
+    responses: BTreeMap<String, OpenApiResponseOut>,
+}
+
+#[derive(serde::Serialize)]
+struct OpenApiParameterOut {
+    name: String,
+    #[serde(rename = "in")]
+    location: String,
+    required: bool,
+    schema: OpenApiSchemaOut,
+}
+
+#[derive(serde::Serialize)]
+struct OpenApiRequestBodyOut {
+    content: BTreeMap<String, OpenApiMediaTypeOut>,
+}
+
+#[derive(serde::Serialize)]
+struct OpenApiMediaTypeOut {
+    schema: OpenApiSchemaOut,
+    example: serde_json::Value,
+}
+
+#[derive(serde::Serialize)]
+struct OpenApiSchemaOut {
+    #[serde(rename = "type")]
+    kind: String,
+}
+
+#[derive(serde::Serialize)]
+struct OpenApiResponseOut {
+    description: String,
+}
+
 /// POSIX-style single-quote escape. Safe for sh/bash/zsh.
 fn shell_quote(s: &str) -> String {
     if !s.is_empty()
@@ -72,6 +269,7 @@ fn shell_quote(s: &str) -> String {
 mod tests {
     use super::*;
     use crate::compose::{Auth, Body, Compose};
+    use crate::workspace::RequestDefinition;
 
     fn base() -> Compose {
         Compose {
@@ -168,5 +366,32 @@ mod tests {
     fn plain_url_is_not_quoted() {
         let s = to_curl(&base()).unwrap();
         assert!(s.ends_with(" https://example.com/api"), "got: {s}");
+    }
+
+    #[test]
+    fn exports_openapi_yaml_for_requests() {
+        let def = RequestDefinition {
+            name: "Create user".into(),
+            description: "Creates a user".into(),
+            pre_request_script: None,
+            post_response_script: None,
+            compose: Compose {
+                method: Method::Post,
+                url: "https://api.example.com/users".into(),
+                query: vec![("notify".into(), "true".into())],
+                headers: vec![("X-Team".into(), "core".into())],
+                auth: Auth::None,
+                body: Body::Json {
+                    text: r#"{"name":"Alice"}"#.into(),
+                },
+            },
+        };
+        let yaml =
+            to_openapi_yaml("Demo", &[("collections/users/create.yaml".into(), def)]).unwrap();
+        assert!(yaml.contains("openapi: 3.0.3"));
+        assert!(yaml.contains("/users:"));
+        assert!(yaml.contains("operationId: collections_users_create"));
+        assert!(yaml.contains("application/json"));
+        assert!(yaml.contains("notify"));
     }
 }
