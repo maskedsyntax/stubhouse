@@ -1,0 +1,25 @@
+name: Create Order
+description: JSON body, bearer auth, pre-request script, and response tests.
+method: POST
+url: "{{base_url}}/api/orders"
+query: []
+headers:
+  - [Accept, application/json]
+  - [X-Tenant, "{{tenant_id}}"]
+auth:
+  kind: bearer
+  token: "{{auth_token}}"
+body:
+  kind: json
+  text: |
+    {
+      "product_id": "prod_1001",
+      "quantity": 2,
+      "request_id": "manual"
+    }
+pre_request_script: |
+  request.headers["X-Scripted"] = "true";
+post_response_script: |
+  test("Order created") { response.status == 201 }
+  test("Response includes order") { response.body.contains("order") }
+  variables["last_order_response"] = response.body;

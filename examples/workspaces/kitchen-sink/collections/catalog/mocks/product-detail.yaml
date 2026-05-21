@@ -1,0 +1,17 @@
+name: Product Detail
+method: GET
+path: /api/products/:id
+priority: 30
+response:
+  status: 200
+  headers:
+    - [X-Mock-Rule, product-detail]
+  body:
+    kind: json
+    text: |
+      {
+        "id": "{{params.id}}",
+        "name": "Mechanical Keyboard",
+        "price": 129.00,
+        "related": "/api/products/{{params.id}}/related"
+      }

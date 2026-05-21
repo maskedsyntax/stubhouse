@@ -1,0 +1,13 @@
+name: Get User Resource
+description: Stateful CRUD resource item lookup.
+method: GET
+url: "{{mock_url}}/api/users/{{user_id}}"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none
+post_response_script: |
+  test("User found") { response.status == 200 }

@@ -1,0 +1,59 @@
+name: Catalog Products
+method: GET
+path: /api/products
+priority: 20
+response:
+  status: 200
+  headers:
+    - [X-Mock-Rule, catalog-products]
+  body:
+    kind: json
+    text: |
+      {
+        "tenant": "default",
+        "products": [
+          { "id": "prod_1001", "name": "Mechanical Keyboard", "price": 129.00, "stock": 14 },
+          { "id": "prod_1002", "name": "USB-C Dock", "price": 89.50, "stock": 7 }
+        ]
+      }
+scenarios:
+  - name: happy_path
+    active: true
+    response:
+      status: 200
+      headers:
+        - [X-Scenario, happy_path]
+      body:
+        kind: json
+        text: |
+          {
+            "products": [
+              { "id": "prod_1001", "name": "Mechanical Keyboard", "price": 129.00, "stock": 14 },
+              { "id": "prod_1002", "name": "USB-C Dock", "price": 89.50, "stock": 7 }
+            ]
+          }
+  - name: empty
+    response:
+      status: 200
+      headers:
+        - [X-Scenario, empty]
+      body:
+        kind: json
+        text: '{ "products": [] }'
+  - name: error
+    response:
+      status: 503
+      headers:
+        - [X-Scenario, error]
+      body:
+        kind: json
+        text: '{ "error": "catalog unavailable" }'
+  - name: slow
+    response:
+      status: 200
+      delay_ms: 750
+      headers:
+        - [X-Scenario, slow]
+      body:
+        kind: json
+        text: '{ "products": [{ "id": "prod_slow", "name": "Delayed Product" }] }'

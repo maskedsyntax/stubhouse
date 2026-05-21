@@ -1,0 +1,45 @@
+name: Create Order
+method: POST
+path: /api/orders
+priority: 40
+response:
+  status: 201
+  headers:
+    - [X-Mock-Rule, create-order]
+  body:
+    kind: json
+    text: |
+      {
+        "order": {
+          "id": "ord_1001",
+          "status": "created",
+          "total": 258.00
+        }
+      }
+scenarios:
+  - name: happy_path
+    active: true
+    response:
+      status: 201
+      headers:
+        - [X-Scenario, happy_path]
+      body:
+        kind: json
+        text: '{ "order": { "id": "ord_1001", "status": "created", "total": 258.00 } }'
+  - name: error
+    response:
+      status: 422
+      headers:
+        - [X-Scenario, error]
+      body:
+        kind: json
+        text: '{ "error": "product is out of stock" }'
+  - name: slow
+    response:
+      status: 201
+      delay_ms: 1000
+      headers:
+        - [X-Scenario, slow]
+      body:
+        kind: json
+        text: '{ "order": { "id": "ord_slow", "status": "created" } }'

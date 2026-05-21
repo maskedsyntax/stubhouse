@@ -1,0 +1,15 @@
+name: Submit Form
+description: Form body request for body editor and cURL export coverage.
+method: POST
+url: "{{base_url}}/api/forms/contact"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: form
+  fields:
+    - [name, Example User]
+    - [email, example@example.test]
+    - [message, Hello from StubHouse]

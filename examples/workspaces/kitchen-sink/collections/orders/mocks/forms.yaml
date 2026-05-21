@@ -1,0 +1,11 @@
+name: Contact Form
+method: POST
+path: /api/forms/contact
+priority: 20
+response:
+  status: 200
+  headers:
+    - [X-Mock-Rule, contact-form]
+  body:
+    kind: json
+    text: '{ "ok": true, "type": "form" }'

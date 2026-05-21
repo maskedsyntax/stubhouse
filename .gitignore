@@ -36,3 +36,5 @@ crates/stubhouse-app/gen/
 # Logs
 *.log
 
+# StubHouse runtime state
+**/.stubhouse/history.db

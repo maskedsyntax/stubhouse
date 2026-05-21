@@ -1,0 +1,11 @@
+name: Secure Endpoints
+method: GET
+path: /api/secure/**
+priority: 10
+response:
+  status: 200
+  headers:
+    - [X-Mock-Rule, secure]
+  body:
+    kind: json
+    text: '{ "authenticated": true, "source": "mock" }'

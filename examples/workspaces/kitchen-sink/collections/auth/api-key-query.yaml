@@ -1,0 +1,15 @@
+name: API Key Query
+description: API key injected as a query parameter.
+method: GET
+url: "{{base_url}}/api/secure/query-key"
+query:
+  - [scope, read]
+headers:
+  - [Accept, application/json]
+auth:
+  kind: apikey
+  in: query
+  name: api_key
+  value: "{{api_key}}"
+body:
+  kind: none

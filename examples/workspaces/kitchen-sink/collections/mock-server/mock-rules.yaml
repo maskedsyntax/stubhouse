@@ -1,0 +1,11 @@
+name: Mock Control Rules
+description: Control API rules endpoint.
+method: GET
+url: "{{mock_url}}/__mirage/rules"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none

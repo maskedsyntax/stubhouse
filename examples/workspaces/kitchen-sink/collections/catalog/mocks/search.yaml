@@ -1,0 +1,11 @@
+name: Product Search
+method: GET
+path: /api/search/:kind
+priority: 25
+condition_script: request.params["kind"] == "products"
+response:
+  status: 200
+  headers:
+    - [X-Mock-Rule, product-search]
+  body_script: |
+    `{"kind":"${request.params["kind"]}","results":[{"id":"prod_1001","score":0.98}]}`

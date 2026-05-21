@@ -1,0 +1,16 @@
+name: Create Task Resource
+description: Stateful CRUD POST with generated id fallback.
+method: POST
+url: "{{mock_url}}/api/tasks"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: json
+  text: |
+    {
+      "title": "Created from StubHouse UI",
+      "completed": false
+    }

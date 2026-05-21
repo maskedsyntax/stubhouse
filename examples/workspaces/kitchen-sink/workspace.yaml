@@ -1,0 +1,24 @@
+name: StubHouse Kitchen Sink
+version: "1"
+mock_resources:
+  - path: /api/users
+    id_field: id
+    seed_file: fixtures/users.yaml
+    auto_crud: true
+  - path: /api/tasks
+    id_field: id
+    seed_file: fixtures/tasks.yaml
+    auto_crud: true
+recording:
+  dir: recordings
+  scrub:
+    replacement: "[REDACTED]"
+    headers:
+      - authorization
+      - x-api-key
+    json_fields:
+      - password
+      - token
+      - secret
+    text:
+      - secret-token

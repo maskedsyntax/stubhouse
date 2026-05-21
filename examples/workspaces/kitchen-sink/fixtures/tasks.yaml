@@ -1,0 +1,6 @@
+- id: task_1001
+  title: Review checkout mocks
+  completed: false
+- id: task_1002
+  title: Validate workspace test runner
+  completed: true

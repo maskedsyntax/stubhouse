@@ -1,0 +1,12 @@
+name: Text Notes
+method: POST
+path: /api/notes
+priority: 20
+response:
+  status: 201
+  headers:
+    - [X-Mock-Rule, text-notes]
+  body:
+    kind: text
+    content_type: text/plain
+    text: Note accepted

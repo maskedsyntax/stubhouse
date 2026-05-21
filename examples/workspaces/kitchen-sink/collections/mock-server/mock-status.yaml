@@ -1,0 +1,11 @@
+name: Mock Control Status
+description: Control API status endpoint.
+method: GET
+url: "{{mock_url}}/__mirage/status"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none

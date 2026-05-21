@@ -1,0 +1,13 @@
+name: mock
+variables:
+  base_url: http://127.0.0.1:4010
+  mock_url: http://127.0.0.1:4010
+  test_api_url: http://127.0.0.1:3000
+  auth_token: demo-token
+  api_key: demo-api-key
+  tenant_id: acme
+  user_id: usr_1001
+secrets:
+  optional_os_token:
+    source: env
+    var: STUBHOUSE_EXAMPLE_TOKEN

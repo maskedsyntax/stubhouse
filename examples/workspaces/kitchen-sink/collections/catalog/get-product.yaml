@@ -1,0 +1,13 @@
+name: Get Product
+description: Exercises route params and static response interpolation.
+method: GET
+url: "{{base_url}}/api/products/prod_1001"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none
+post_response_script: |
+  test("Status is 200") { response.status == 200 }

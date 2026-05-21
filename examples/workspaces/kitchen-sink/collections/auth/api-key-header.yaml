@@ -1,0 +1,14 @@
+name: API Key Header
+description: API key injected as a request header.
+method: GET
+url: "{{base_url}}/api/secure/key"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: apikey
+  in: header
+  name: X-API-Key
+  value: "{{api_key}}"
+body:
+  kind: none

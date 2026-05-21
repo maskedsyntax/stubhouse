@@ -1,0 +1,14 @@
+name: List Users Resource
+description: Stateful CRUD resource seeded from fixtures/users.yaml.
+method: GET
+url: "{{mock_url}}/api/users"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none
+post_response_script: |
+  test("Users listed") { response.status == 200 }
+  test("Seed fixture present") { response.body.contains("Ada Lovelace") }

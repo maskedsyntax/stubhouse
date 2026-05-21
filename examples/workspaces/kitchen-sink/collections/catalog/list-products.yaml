@@ -1,0 +1,16 @@
+name: List Products
+description: Mocked catalog list with scenario variants.
+method: GET
+url: "{{base_url}}/api/products"
+query:
+  - [tenant, "{{tenant_id}}"]
+  - [limit, "20"]
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none
+post_response_script: |
+  test("Status is 200") { response.status == 200 }
+  test("Has a response body") { response.body.len > 0 }

@@ -1,0 +1,11 @@
+name: Mock Control Log
+description: Control API request log endpoint.
+method: GET
+url: "{{mock_url}}/__mirage/log"
+query: []
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none

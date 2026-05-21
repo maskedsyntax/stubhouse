@@ -1,0 +1,12 @@
+name: Search Products
+description: Exercises query params and a Rhai condition on a mock route.
+method: GET
+url: "{{base_url}}/api/search/products"
+query:
+  - [q, keyboard]
+headers:
+  - [Accept, application/json]
+auth:
+  kind: none
+body:
+  kind: none

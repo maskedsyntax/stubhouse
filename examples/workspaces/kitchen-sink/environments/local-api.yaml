@@ -1,0 +1,9 @@
+name: local-api
+variables:
+  base_url: http://127.0.0.1:3000
+  mock_url: http://127.0.0.1:4010
+  test_api_url: http://127.0.0.1:3000
+  auth_token: local-dev-token
+  api_key: local-api-key
+  tenant_id: local
+  user_id: usr_1001

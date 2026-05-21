@@ -1,0 +1,13 @@
+name: Submit Text Note
+description: Plain text request body coverage.
+method: POST
+url: "{{base_url}}/api/notes"
+query: []
+headers:
+  - [Accept, text/plain]
+auth:
+  kind: none
+body:
+  kind: text
+  content_type: text/plain
+  text: "Ship local-first tools."
