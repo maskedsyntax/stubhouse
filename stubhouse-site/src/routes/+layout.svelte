@@ -3,6 +3,7 @@
   import { onMount } from 'svelte';
   import NavBar from '$lib/components/NavBar.svelte';
   import Footer from '$lib/components/Footer.svelte';
+  import BackToTop from '$lib/components/BackToTop.svelte';
 
   let { data, children } = $props();
 
@@ -32,6 +33,7 @@
   {@render children()}
 </main>
 <Footer />
+<BackToTop />
 
 <style>
   .main {
