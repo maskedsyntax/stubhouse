@@ -455,11 +455,15 @@ stubhouse export curl collections/users/get-user.yaml --env dev`;
     display: block;
     width: 88px;
     height: 88px;
-    margin-inline: auto;
+    margin: 0 auto 22px;
     border-radius: 18px;
     box-shadow:
       0 22px 70px rgba(0, 0, 0, 0.32),
       0 0 0 1px var(--border-subtle);
+  }
+
+  .hero__mark + .eyebrow {
+    margin-top: 0;
   }
 
   .hero__title {
