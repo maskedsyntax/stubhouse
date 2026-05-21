@@ -42,6 +42,25 @@ pub struct MockRule {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MockResource {
+    pub path: String,
+    #[serde(default = "default_resource_id_field")]
+    pub id_field: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub seed_file: Option<PathBuf>,
+    #[serde(default = "default_true")]
+    pub auto_crud: bool,
+}
+
+fn default_resource_id_field() -> String {
+    "id".into()
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct MockScenario {
     pub name: String,
     #[serde(default)]
@@ -178,6 +197,8 @@ pub enum MockError {
         #[source]
         source: serde_yaml::Error,
     },
+    #[error("fixture {file} must contain a YAML sequence")]
+    InvalidFixture { file: PathBuf },
     #[error("server error: {0}")]
     Server(String),
 }
@@ -191,6 +212,59 @@ pub fn load_rules(workspace_root: &Path) -> Result<Vec<MockRule>, MockError> {
     // Higher priority first. Stable ordering by file means ties are broken predictably.
     rules.sort_by(|a, b| b.priority.cmp(&a.priority));
     Ok(rules)
+}
+
+pub fn load_resources(
+    workspace_root: &Path,
+) -> Result<Vec<(MockResource, Vec<serde_json::Value>)>, MockError> {
+    #[derive(Deserialize)]
+    struct ResourceManifest {
+        #[serde(default)]
+        mock_resources: Vec<MockResource>,
+    }
+
+    let manifest_path = workspace_root.join(crate::workspace::MANIFEST_FILENAME);
+    if !manifest_path.exists() {
+        return Ok(vec![]);
+    }
+    let manifest: ResourceManifest = serde_yaml::from_str(&fs::read_to_string(&manifest_path)?)
+        .map_err(|source| MockError::Yaml {
+            file: manifest_path.clone(),
+            source,
+        })?;
+
+    manifest
+        .mock_resources
+        .into_iter()
+        .map(|resource| {
+            let seed = match &resource.seed_file {
+                Some(seed_file) => {
+                    let seed_path = resolve_workspace_path(workspace_root, seed_file);
+                    let value: serde_json::Value = serde_yaml::from_str(&fs::read_to_string(
+                        &seed_path,
+                    )?)
+                    .map_err(|source| MockError::Yaml {
+                        file: seed_path.clone(),
+                        source,
+                    })?;
+                    value
+                        .as_array()
+                        .cloned()
+                        .ok_or_else(|| MockError::InvalidFixture { file: seed_path })?
+                }
+                None => vec![],
+            };
+            Ok((resource, seed))
+        })
+        .collect()
+}
+
+fn resolve_workspace_path(workspace_root: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        workspace_root.join(path)
+    }
 }
 
 pub fn list_scenarios(workspace_root: &Path) -> Result<Vec<ScenarioEntry>, MockError> {

@@ -65,8 +65,8 @@ Top of list is "do next". Mark with `[x]` when done.
 
 ## Phase 4 — Advanced Mock Features
 
-- [ ] In-memory state store + CRUD simulation (`mock_resources`)
-- [ ] Fixture files + seed data
+- [x] In-memory state store + CRUD simulation (`mock_resources`)
+- [x] Fixture files + seed data
 - [ ] Recording mode (passthrough + capture to YAML)
 - [ ] Sensitive data scrubbing config
 - [ ] Imports: Insomnia v4, OpenAPI 3.x, HAR, Bruno `.bru`

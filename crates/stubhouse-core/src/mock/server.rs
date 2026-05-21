@@ -1,5 +1,6 @@
 //! Embedded HTTP server that serves mock rules.
 
+use std::collections::HashMap;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -19,8 +20,8 @@ use tokio::sync::{oneshot, RwLock};
 
 use super::matcher::{find_match, Match};
 use super::{
-    load_rules, render_body, MockBody, MockError, MockFault, MockFaultKind, MockRule,
-    ScenarioActivation,
+    load_resources, load_rules, render_body, MockBody, MockError, MockFault, MockFaultKind,
+    MockResource, MockRule, ScenarioActivation,
 };
 use crate::{http::Method, script::ScriptRuntime};
 
@@ -46,7 +47,15 @@ pub struct MockReload {
 #[derive(Clone)]
 struct ServerState {
     rules: Arc<RwLock<Vec<MockRule>>>,
+    resources: Arc<RwLock<ResourceState>>,
     logs: Arc<RwLock<Vec<MockLog>>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ResourceState {
+    definitions: Vec<MockResource>,
+    seeds: HashMap<String, Vec<serde_json::Value>>,
+    data: HashMap<String, Vec<serde_json::Value>>,
 }
 
 /// Run the mock server in the foreground, until ctrl-c (or `shutdown_rx` fires).
@@ -57,7 +66,14 @@ pub async fn run(
     shutdown_rx: Option<oneshot::Receiver<()>>,
     on_log: Option<Arc<dyn Fn(MockLog) + Send + Sync>>,
 ) -> Result<(), MockError> {
-    run_dynamic(ServerState::new(rules), addr, shutdown_rx, on_log, None).await
+    run_dynamic(
+        ServerState::new(rules, ResourceState::default()),
+        addr,
+        shutdown_rx,
+        on_log,
+        None,
+    )
+    .await
 }
 
 /// Run the mock server and reload `collections/*/mocks/*.yaml` from disk when
@@ -69,7 +85,10 @@ pub async fn run_with_hot_reload(
     on_log: Option<Arc<dyn Fn(MockLog) + Send + Sync>>,
     on_reload: Option<Arc<dyn Fn(MockReload) + Send + Sync>>,
 ) -> Result<(), MockError> {
-    let state = ServerState::new(load_rules(&workspace_root)?);
+    let state = ServerState::new(
+        load_rules(&workspace_root)?,
+        ResourceState::from_loaded(load_resources(&workspace_root)?),
+    );
     run_dynamic(
         state,
         addr,
@@ -101,7 +120,8 @@ async fn run_dynamic(
             res = accept => res,
             _ = reload_tick.tick(), if reload.is_some() => {
                 if let Some((workspace_root, on_reload)) = &reload {
-                    reload_rules(workspace_root, &state.rules, on_reload).await;
+                    reload_workspace(workspace_root, &state.rules, &state.resources, on_reload)
+                        .await;
                 }
                 continue;
             }
@@ -133,34 +153,67 @@ async fn run_dynamic(
 }
 
 impl ServerState {
-    fn new(rules: Vec<MockRule>) -> Self {
+    fn new(rules: Vec<MockRule>, resources: ResourceState) -> Self {
         Self {
             rules: Arc::new(RwLock::new(rules)),
+            resources: Arc::new(RwLock::new(resources)),
             logs: Arc::new(RwLock::new(Vec::new())),
         }
     }
 }
 
-async fn reload_rules(
+impl ResourceState {
+    fn from_loaded(resources: Vec<(MockResource, Vec<serde_json::Value>)>) -> Self {
+        let mut definitions = Vec::new();
+        let mut seeds = HashMap::new();
+        let mut data = HashMap::new();
+        for (resource, seed) in resources {
+            let key = resource.path.trim_end_matches('/').to_string();
+            definitions.push(resource);
+            seeds.insert(key.clone(), seed.clone());
+            data.insert(key, seed);
+        }
+        Self {
+            definitions,
+            seeds,
+            data,
+        }
+    }
+
+    fn reset(&mut self) -> usize {
+        self.data = self.seeds.clone();
+        self.definitions.len()
+    }
+}
+
+async fn reload_workspace(
     workspace_root: &PathBuf,
     rules: &Arc<RwLock<Vec<MockRule>>>,
+    resources: &Arc<RwLock<ResourceState>>,
     on_reload: &Option<Arc<dyn Fn(MockReload) + Send + Sync>>,
 ) {
-    match load_rules(workspace_root) {
-        Ok(next) => {
+    match (load_rules(workspace_root), load_resources(workspace_root)) {
+        (Ok(next), Ok(next_resources)) => {
             let mut guard = rules.write().await;
+            let next_resources = ResourceState::from_loaded(next_resources);
+            let mut resource_guard = resources.write().await;
             if *guard != next {
                 let count = next.len();
                 *guard = next;
+                *resource_guard = next_resources;
                 if let Some(callback) = on_reload {
                     callback(MockReload {
                         rules: count,
                         error: None,
                     });
                 }
+            } else if resource_guard.definitions != next_resources.definitions
+                || resource_guard.seeds != next_resources.seeds
+            {
+                *resource_guard = next_resources;
             }
         }
-        Err(e) => {
+        (Err(e), _) | (_, Err(e)) => {
             if let Some(callback) = on_reload {
                 callback(MockReload {
                     rules: rules.read().await.len(),
@@ -214,6 +267,15 @@ async fn handle(
             )
         })
     };
+    if matched.is_none() {
+        let resource_match = {
+            let resources = state.resources.read().await;
+            match_resource(&resources, method, &path)
+        };
+        if let Some(resource_match) = resource_match {
+            return handle_resource(state, req, log, method, path, resource_match).await;
+        }
+    }
     let (status, body_bytes, headers, matched_name): (
         u16,
         Bytes,
@@ -583,6 +645,249 @@ async fn record_log(logs: &Arc<RwLock<Vec<MockLog>>>, entry: MockLog) {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ResourceMatch {
+    resource: MockResource,
+    key: String,
+    id: Option<String>,
+}
+
+fn match_resource(state: &ResourceState, method: Method, path: &str) -> Option<ResourceMatch> {
+    for resource in &state.definitions {
+        if !resource.auto_crud {
+            continue;
+        }
+        let key = resource.path.trim_end_matches('/').to_string();
+        let path = path.trim_end_matches('/');
+        if path == key && matches!(method, Method::Get | Method::Post) {
+            return Some(ResourceMatch {
+                resource: resource.clone(),
+                key,
+                id: None,
+            });
+        }
+        let item_prefix = format!("{key}/");
+        if let Some(id) = path.strip_prefix(&item_prefix) {
+            if !id.is_empty()
+                && !id.contains('/')
+                && matches!(
+                    method,
+                    Method::Get | Method::Put | Method::Patch | Method::Delete
+                )
+            {
+                return Some(ResourceMatch {
+                    resource: resource.clone(),
+                    key,
+                    id: Some(id.to_string()),
+                });
+            }
+        }
+    }
+    None
+}
+
+async fn handle_resource(
+    state: ServerState,
+    req: Request<Incoming>,
+    log: Arc<dyn Fn(MockLog) + Send + Sync>,
+    method: Method,
+    path: String,
+    resource_match: ResourceMatch,
+) -> Result<Response<MockResponseBody>, std::io::Error> {
+    let matched_name = Some(format!("resource:{}", resource_match.key));
+    let response = match method {
+        Method::Get if resource_match.id.is_none() => {
+            let resources = state.resources.read().await;
+            let items = resources
+                .data
+                .get(&resource_match.key)
+                .cloned()
+                .unwrap_or_default();
+            json_bytes_response(200, &items)
+        }
+        Method::Get => {
+            let resources = state.resources.read().await;
+            match find_resource_item(
+                resources.data.get(&resource_match.key),
+                &resource_match.resource.id_field,
+                resource_match.id.as_deref().unwrap_or_default(),
+            ) {
+                Some(item) => json_bytes_response(200, item),
+                None => json_bytes_response(404, &serde_json::json!({ "error": "not found" })),
+            }
+        }
+        Method::Post => {
+            let mut item = parse_resource_body(req).await?;
+            let mut resources = state.resources.write().await;
+            let items = resources
+                .data
+                .entry(resource_match.key.clone())
+                .or_default();
+            ensure_resource_id(&mut item, &resource_match.resource.id_field, || {
+                next_resource_id(Some(items.as_slice()), &resource_match.resource.id_field)
+            });
+            items.push(item.clone());
+            json_bytes_response(201, &item)
+        }
+        Method::Put => {
+            let mut item = parse_resource_body(req).await?;
+            if let Some(id) = &resource_match.id {
+                set_resource_id(&mut item, &resource_match.resource.id_field, id);
+            }
+            let mut resources = state.resources.write().await;
+            let items = resources
+                .data
+                .entry(resource_match.key.clone())
+                .or_default();
+            let id = resource_match.id.as_deref().unwrap_or_default();
+            if let Some(existing) =
+                find_resource_item_mut(items, &resource_match.resource.id_field, id)
+            {
+                *existing = item.clone();
+            } else {
+                items.push(item.clone());
+            }
+            json_bytes_response(200, &item)
+        }
+        Method::Patch => {
+            let patch = parse_resource_body(req).await?;
+            let mut resources = state.resources.write().await;
+            let items = resources
+                .data
+                .entry(resource_match.key.clone())
+                .or_default();
+            let id = resource_match.id.as_deref().unwrap_or_default();
+            match find_resource_item_mut(items, &resource_match.resource.id_field, id) {
+                Some(existing) => {
+                    merge_json(existing, patch);
+                    json_bytes_response(200, existing)
+                }
+                None => json_bytes_response(404, &serde_json::json!({ "error": "not found" })),
+            }
+        }
+        Method::Delete => {
+            let mut resources = state.resources.write().await;
+            let items = resources
+                .data
+                .entry(resource_match.key.clone())
+                .or_default();
+            let id = resource_match.id.as_deref().unwrap_or_default();
+            let before = items.len();
+            items.retain(|item| !resource_id_matches(item, &resource_match.resource.id_field, id));
+            if items.len() == before {
+                json_bytes_response(404, &serde_json::json!({ "error": "not found" }))
+            } else {
+                (204, Bytes::new())
+            }
+        }
+        _ => json_bytes_response(405, &serde_json::json!({ "error": "method not allowed" })),
+    };
+
+    finish_response(
+        state,
+        log,
+        method,
+        path,
+        response.0,
+        response.1,
+        vec![("Content-Type".into(), "application/json".into())],
+        matched_name,
+    )
+    .await
+}
+
+async fn parse_resource_body(req: Request<Incoming>) -> Result<serde_json::Value, std::io::Error> {
+    let bytes = req
+        .into_body()
+        .collect()
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
+        .to_bytes();
+    serde_json::from_slice(&bytes)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+}
+
+fn json_bytes_response<T: serde::Serialize + ?Sized>(status: u16, value: &T) -> (u16, Bytes) {
+    match serde_json::to_vec(value) {
+        Ok(body) => (status, Bytes::from(body)),
+        Err(_) => (
+            500,
+            Bytes::from_static(b"{\"error\":\"serialize response\"}"),
+        ),
+    }
+}
+
+fn find_resource_item<'a>(
+    items: Option<&'a Vec<serde_json::Value>>,
+    id_field: &str,
+    id: &str,
+) -> Option<&'a serde_json::Value> {
+    items?
+        .iter()
+        .find(|item| resource_id_matches(item, id_field, id))
+}
+
+fn find_resource_item_mut<'a>(
+    items: &'a mut [serde_json::Value],
+    id_field: &str,
+    id: &str,
+) -> Option<&'a mut serde_json::Value> {
+    items
+        .iter_mut()
+        .find(|item| resource_id_matches(item, id_field, id))
+}
+
+fn resource_id_matches(item: &serde_json::Value, id_field: &str, id: &str) -> bool {
+    match item.get(id_field) {
+        Some(serde_json::Value::String(value)) => value == id,
+        Some(serde_json::Value::Number(value)) => value.to_string() == id,
+        Some(value) => value.to_string().trim_matches('"') == id,
+        None => false,
+    }
+}
+
+fn ensure_resource_id(
+    item: &mut serde_json::Value,
+    id_field: &str,
+    next_id: impl FnOnce() -> serde_json::Value,
+) {
+    if item.get(id_field).is_none() {
+        set_resource_id_value(item, id_field, next_id());
+    }
+}
+
+fn set_resource_id(item: &mut serde_json::Value, id_field: &str, id: &str) {
+    set_resource_id_value(item, id_field, serde_json::Value::String(id.to_string()));
+}
+
+fn set_resource_id_value(item: &mut serde_json::Value, id_field: &str, id: serde_json::Value) {
+    if let serde_json::Value::Object(map) = item {
+        map.insert(id_field.to_string(), id);
+    }
+}
+
+fn next_resource_id(items: Option<&[serde_json::Value]>, id_field: &str) -> serde_json::Value {
+    let next = items
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|item| item.get(id_field)?.as_u64())
+        .max()
+        .unwrap_or(0)
+        + 1;
+    serde_json::Value::Number(next.into())
+}
+
+fn merge_json(target: &mut serde_json::Value, patch: serde_json::Value) {
+    match (target, patch) {
+        (serde_json::Value::Object(target), serde_json::Value::Object(patch)) => {
+            for (key, value) in patch {
+                target.insert(key, value);
+            }
+        }
+        (target, patch) => *target = patch,
+    }
+}
+
 #[derive(Debug, serde::Serialize)]
 struct ControlStatus {
     ok: bool,
@@ -607,6 +912,7 @@ struct ScenarioSwitch {
 struct ResetResponse {
     ok: bool,
     reset: bool,
+    resources: usize,
 }
 
 async fn handle_control(state: ServerState, req: Request<Incoming>) -> Response<MockResponseBody> {
@@ -637,13 +943,17 @@ async fn handle_control(state: ServerState, req: Request<Incoming>) -> Response<
             json_response(200, &logs[start..])
         }
         (hyper::Method::POST, "/__mirage/scenario") => switch_scenario(state, req).await,
-        (hyper::Method::POST, "/__mirage/reset") => json_response(
-            200,
-            &ResetResponse {
-                ok: true,
-                reset: true,
-            },
-        ),
+        (hyper::Method::POST, "/__mirage/reset") => {
+            let resources = state.resources.write().await.reset();
+            json_response(
+                200,
+                &ResetResponse {
+                    ok: true,
+                    reset: true,
+                    resources,
+                },
+            )
+        }
         (hyper::Method::GET | hyper::Method::POST, _) => {
             json_error(404, "unknown __mirage endpoint")
         }
@@ -1531,6 +1841,114 @@ response:
         assert_eq!(resp.text().await.unwrap(), r#"{"id":"42","scripted":true}"#);
 
         let resp = reqwest::get(format!("http://{bound}/users/7"))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 404);
+
+        let _ = tx.send(());
+        let _ = handle.await;
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn mock_resources_provide_stateful_crud_and_reset() {
+        let dir = TempDir::new().unwrap();
+        fs::create_dir_all(dir.path().join("fixtures")).unwrap();
+        fs::write(
+            dir.path().join("workspace.yaml"),
+            r#"
+name: demo
+version: "1"
+mock_resources:
+  - path: /users
+    id_field: id
+    seed_file: fixtures/users.yaml
+    auto_crud: true
+"#,
+        )
+        .unwrap();
+        fs::write(
+            dir.path().join("fixtures/users.yaml"),
+            r#"
+- id: 1
+  name: Alice
+- id: 2
+  name: Ben
+"#,
+        )
+        .unwrap();
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let bound = listener.local_addr().unwrap();
+        drop(listener);
+
+        let (tx, rx) = oneshot::channel();
+        let root = dir.path().to_path_buf();
+        let handle =
+            tokio::spawn(
+                async move { run_with_hot_reload(root, bound, Some(rx), None, None).await },
+            );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let client = reqwest::Client::new();
+        let list: serde_json::Value = serde_json::from_str(
+            &client
+                .get(format!("http://{bound}/users"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(list.as_array().unwrap().len(), 2);
+
+        let created: serde_json::Value = serde_json::from_str(
+            &client
+                .post(format!("http://{bound}/users"))
+                .header("Content-Type", "application/json")
+                .body(r#"{"name":"Casey"}"#)
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(created["id"], 3);
+
+        let patched: serde_json::Value = serde_json::from_str(
+            &client
+                .patch(format!("http://{bound}/users/3"))
+                .header("Content-Type", "application/json")
+                .body(r#"{"name":"C"}"#)
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(patched["name"], "C");
+
+        let reset: serde_json::Value = serde_json::from_str(
+            &client
+                .post(format!("http://{bound}/__mirage/reset"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(reset["resources"], 1);
+
+        let resp = client
+            .get(format!("http://{bound}/users/3"))
+            .send()
             .await
             .unwrap();
         assert_eq!(resp.status(), 404);
