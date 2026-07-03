@@ -1,17 +1,47 @@
 <script lang="ts">
+  import { onDestroy } from "svelte";
   import type { ResponseDto } from "./api";
   import SyntaxBlock from "./SyntaxBlock.svelte";
 
+  type ResponseState =
+    | { mode: "idle"; response: null; error: null }
+    | { mode: "loading"; response: null; error: null }
+    | { mode: "response"; response: ResponseDto; error: null }
+    | { mode: "error"; response: null; error: string };
+
   type Props = {
-    response: ResponseDto | null;
-    error: string | null;
-    loading: boolean;
+    view: ResponseState;
   };
 
-  let { response, error, loading }: Props = $props();
+  let { view }: Props = $props();
 
   type Tab = "body" | "headers";
   let activeTab: Tab = $state("body");
+  let loadingSeconds = $state(0);
+  let loadingTimer: number | null = null;
+
+  $effect(() => {
+    if (loadingTimer !== null) {
+      window.clearInterval(loadingTimer);
+      loadingTimer = null;
+    }
+    if (view.mode === "loading") {
+      loadingSeconds = 0;
+      loadingTimer = window.setInterval(() => {
+        loadingSeconds += 1;
+      }, 1000);
+    }
+    return () => {
+      if (loadingTimer !== null) {
+        window.clearInterval(loadingTimer);
+        loadingTimer = null;
+      }
+    };
+  });
+
+  onDestroy(() => {
+    if (loadingTimer !== null) window.clearInterval(loadingTimer);
+  });
 
   function statusTone(status: number): string {
     if (status >= 500) return "bg-red-900/60 text-red-200 border-red-700";
@@ -50,14 +80,17 @@
 </script>
 
 <section class="ui-panel flex flex-1 flex-col overflow-hidden">
-  {#if loading}
-    <div class="flex flex-1 items-center justify-center ui-empty">sending…</div>
-  {:else if error}
+  {#if view.mode === "loading"}
+    <div class="flex flex-1 items-center justify-center ui-empty">
+      sending… {loadingSeconds}s
+    </div>
+  {:else if view.mode === "error"}
     <div class="flex flex-1 flex-col gap-2 p-4">
       <div class="ui-label text-red-300">Error</div>
-      <pre class="whitespace-pre-wrap text-sm leading-6 text-red-200">{error}</pre>
+      <pre class="whitespace-pre-wrap text-sm leading-6 text-red-200">{view.error}</pre>
     </div>
-  {:else if response}
+  {:else if view.mode === "response"}
+    {@const response = view.response}
     {@const language = responseLanguage(response)}
     <header class="flex items-center gap-3 border-b ui-divider px-3 py-2 text-sm">
       <span class="rounded-md border px-2 py-0.5 font-semibold {statusTone(response.status)}">

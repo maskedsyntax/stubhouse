@@ -1,4 +1,4 @@
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -62,6 +62,9 @@ pub enum RequestError {
     Timeout,
 }
 
+const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+
 impl From<reqwest::Error> for RequestError {
     fn from(e: reqwest::Error) -> Self {
         if e.is_timeout() {
@@ -77,10 +80,13 @@ impl From<reqwest::Error> for RequestError {
 pub async fn send(req: Request) -> Result<Response, RequestError> {
     let client = reqwest::Client::builder()
         .user_agent(concat!("stubhouse/", env!("CARGO_PKG_VERSION")))
+        .connect_timeout(DEFAULT_CONNECT_TIMEOUT)
+        .timeout(DEFAULT_REQUEST_TIMEOUT)
         .build()
         .map_err(RequestError::from)?;
 
     let mut builder = client.request(req.method.as_reqwest(), &req.url);
+    builder = builder.header(reqwest::header::ACCEPT, "*/*");
     for (k, v) in &req.headers {
         builder = builder.header(k, v);
     }
@@ -88,6 +94,11 @@ pub async fn send(req: Request) -> Result<Response, RequestError> {
         builder = builder.body(body);
     }
 
+    eprintln!(
+        "stubhouse http: sending {} {}",
+        method_name(req.method),
+        req.url
+    );
     let started = Instant::now();
     let resp = builder.send().await?;
     let status = resp.status().as_u16();
@@ -99,6 +110,10 @@ pub async fn send(req: Request) -> Result<Response, RequestError> {
     let body = resp.bytes().await?;
     let elapsed_ms = started.elapsed().as_millis() as u64;
     let size_bytes = body.len();
+    eprintln!(
+        "stubhouse http: received {} from {} in {}ms ({} bytes)",
+        status, req.url, elapsed_ms, size_bytes
+    );
 
     Ok(Response {
         status,
@@ -107,6 +122,18 @@ pub async fn send(req: Request) -> Result<Response, RequestError> {
         elapsed_ms,
         size_bytes,
     })
+}
+
+fn method_name(method: Method) -> &'static str {
+    match method {
+        Method::Get => "GET",
+        Method::Post => "POST",
+        Method::Put => "PUT",
+        Method::Patch => "PATCH",
+        Method::Delete => "DELETE",
+        Method::Head => "HEAD",
+        Method::Options => "OPTIONS",
+    }
 }
 
 mod bytes_as_base64 {

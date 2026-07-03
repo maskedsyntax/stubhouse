@@ -1,24 +1,27 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
+    atomic::{AtomicU64, AtomicUsize, Ordering},
     Arc, Mutex,
 };
+use std::time::Duration;
 
 use serde::Serialize;
 use stubhouse_core::{
-    from_postman_v21, interpolate_compose, list_environments, load_environment,
+    from_bruno_bru, from_har, from_insomnia_v4, from_postman_v21, interpolate_compose,
+    list_environments, load_environment,
     mock::{
         activate_scenario, list_scenarios, load_rules,
         server::{run_with_hot_reload, MockLog, MockReload},
         ScenarioActivation, ScenarioEntry,
     },
     run_workspace_tests, save_environment, send, to_curl, Compose, Environment, EnvironmentEntry,
-    EnvironmentFile, History, HistoryEntry, RequestDefinition, RequestEntry, Response,
-    TestRunResult, Workspace, WorkspaceManifest,
+    EnvironmentFile, History, HistoryEntry, ImportedRequest, RequestDefinition, RequestEntry,
+    Response, TestRunResult, Workspace, WorkspaceManifest,
 };
-use tauri::{Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 #[derive(Default)]
 struct AppState {
@@ -26,6 +29,8 @@ struct AppState {
     history: Mutex<Option<History>>,
     active_env: Mutex<Option<Environment>>,
     mock_server: Mutex<Option<MockServerRuntime>>,
+    send_seq: AtomicU64,
+    send_results: Mutex<HashMap<u64, Result<ResponseDto, String>>>,
 }
 
 struct MockServerRuntime {
@@ -36,7 +41,7 @@ struct MockServerRuntime {
     shutdown: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 struct ResponseDto {
     status: u16,
     headers: Vec<(String, String)>,
@@ -44,6 +49,19 @@ struct ResponseDto {
     elapsed_ms: u64,
     size_bytes: usize,
     history_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SendResponseEvent {
+    request_id: u64,
+    response: ResponseDto,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AsyncSendResult {
+    done: bool,
+    response: Option<ResponseDto>,
+    error: Option<String>,
 }
 
 impl ResponseDto {
@@ -95,7 +113,12 @@ impl MockServerStatus {
 }
 
 #[tauri::command]
-async fn send_request(req: Compose, state: State<'_, AppState>) -> Result<ResponseDto, String> {
+async fn send_request(
+    req: Compose,
+    request_id: Option<u64>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> Result<ResponseDto, String> {
     let resolved = {
         let guard = state.active_env.lock().unwrap();
         match guard.as_ref() {
@@ -104,13 +127,106 @@ async fn send_request(req: Compose, state: State<'_, AppState>) -> Result<Respon
         }
     };
     let wire = resolved.clone().build().map_err(|e| e.to_string())?;
-    let resp = send(wire).await.map_err(|e| e.to_string())?;
+    let resp = tokio::time::timeout(Duration::from_secs(30), send(wire))
+        .await
+        .map_err(|_| "request timed out after 30 seconds".to_string())?
+        .map_err(|e| e.to_string())?;
 
-    let history_id = {
-        let guard = state.history.lock().unwrap();
-        guard.as_ref().and_then(|h| h.record(&resolved, &resp).ok())
+    let history_id = state
+        .history
+        .try_lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().and_then(|h| h.record(&resolved, &resp).ok()));
+
+    let dto = ResponseDto::from_response(resp, history_id);
+    if let Some(request_id) = request_id {
+        let _ = app.emit(
+            "send-response",
+            SendResponseEvent {
+                request_id,
+                response: dto.clone(),
+            },
+        );
+    }
+    eprintln!(
+        "stubhouse app: returning response {} (history: {})",
+        dto.status,
+        history_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "skipped".into())
+    );
+    Ok(dto)
+}
+
+#[tauri::command]
+fn start_send_request(req: Compose, state: State<'_, AppState>, app: AppHandle) -> u64 {
+    let request_id = state.send_seq.fetch_add(1, Ordering::Relaxed) + 1;
+    {
+        let mut results = state.send_results.lock().unwrap();
+        results.remove(&request_id);
+    }
+    tauri::async_runtime::spawn(async move {
+        let result = perform_send_request(req, &app).await;
+        let state = app.state::<AppState>();
+        state
+            .send_results
+            .lock()
+            .unwrap()
+            .insert(request_id, result);
+    });
+    request_id
+}
+
+#[tauri::command]
+fn poll_send_result(request_id: u64, state: State<'_, AppState>) -> AsyncSendResult {
+    let mut results = state.send_results.lock().unwrap();
+    match results.remove(&request_id) {
+        Some(Ok(response)) => AsyncSendResult {
+            done: true,
+            response: Some(response),
+            error: None,
+        },
+        Some(Err(error)) => AsyncSendResult {
+            done: true,
+            response: None,
+            error: Some(error),
+        },
+        None => AsyncSendResult {
+            done: false,
+            response: None,
+            error: None,
+        },
+    }
+}
+
+async fn perform_send_request(req: Compose, app: &AppHandle) -> Result<ResponseDto, String> {
+    let state = app.state::<AppState>();
+    let resolved = {
+        let guard = state.active_env.lock().unwrap();
+        match guard.as_ref() {
+            Some(env) => interpolate_compose(&req, &env.variables),
+            None => req.clone(),
+        }
     };
+    let wire = resolved.clone().build().map_err(|e| e.to_string())?;
+    let resp = tokio::time::timeout(Duration::from_secs(30), send(wire))
+        .await
+        .map_err(|_| "request timed out after 30 seconds".to_string())?
+        .map_err(|e| e.to_string())?;
 
+    let history_id = state
+        .history
+        .try_lock()
+        .ok()
+        .and_then(|guard| guard.as_ref().and_then(|h| h.record(&resolved, &resp).ok()));
+
+    eprintln!(
+        "stubhouse app: async response {} (history: {})",
+        resp.status,
+        history_id
+            .map(|id| id.to_string())
+            .unwrap_or_else(|| "skipped".into())
+    );
     Ok(ResponseDto::from_response(resp, history_id))
 }
 
@@ -342,13 +458,40 @@ struct ImportSummary {
 
 #[tauri::command]
 fn import_postman(path: String, state: State<'_, AppState>) -> Result<ImportSummary, String> {
+    let json = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
+    let items = from_postman_v21(&json).map_err(|e| e.to_string())?;
+    save_imported_items(items, state)
+}
+
+#[tauri::command]
+fn import_insomnia(path: String, state: State<'_, AppState>) -> Result<ImportSummary, String> {
+    let json = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
+    let items = from_insomnia_v4(&json).map_err(|e| e.to_string())?;
+    save_imported_items(items, state)
+}
+
+#[tauri::command]
+fn import_har(path: String, state: State<'_, AppState>) -> Result<ImportSummary, String> {
+    let json = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
+    let items = from_har(&json).map_err(|e| e.to_string())?;
+    save_imported_items(items, state)
+}
+
+#[tauri::command]
+fn import_bruno(path: String, state: State<'_, AppState>) -> Result<ImportSummary, String> {
+    let source = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
+    let items = from_bruno_bru(&source).map_err(|e| e.to_string())?;
+    save_imported_items(items, state)
+}
+
+fn save_imported_items(
+    items: Vec<ImportedRequest>,
+    state: State<'_, AppState>,
+) -> Result<ImportSummary, String> {
     let guard = state.workspace.lock().unwrap();
     let ws = guard
         .as_ref()
         .ok_or_else(|| "no workspace open".to_string())?;
-
-    let json = std::fs::read_to_string(&path).map_err(|e| format!("read {path}: {e}"))?;
-    let items = from_postman_v21(&json).map_err(|e| e.to_string())?;
 
     let mut collections: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     for item in &items {
@@ -459,6 +602,8 @@ fn main() {
             deactivate_env,
             active_env,
             save_env,
+            start_send_request,
+            poll_send_result,
             list_mock_scenarios,
             activate_mock_scenario,
             start_mock_server,
@@ -466,6 +611,9 @@ fn main() {
             mock_server_status,
             export_curl,
             import_postman,
+            import_insomnia,
+            import_har,
+            import_bruno,
             run_tests,
         ])
         .run(tauri::generate_context!())

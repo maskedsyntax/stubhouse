@@ -5,12 +5,14 @@ use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
 use stubhouse_core::{
-    from_openapi3, from_postman_v21, interpolate_compose, list_environments, load_environment,
+    detect_openapi_drift, from_bruno_bru, from_har, from_insomnia_v4, from_openapi3,
+    from_postman_v21, interpolate_compose, list_environments, load_environment,
     mock::{
         activate_scenario, list_scenarios, load_rules,
         server::{run_with_hot_reload, MockReload},
     },
-    run_workspace_tests, to_curl, to_openapi_yaml, ImportedRequest, Workspace,
+    run_workspace_tests, to_curl, to_docker_compose, to_markdown_docs, to_openapi_yaml, History,
+    ImportedRequest, RequestDefinition, Workspace,
 };
 
 #[derive(Parser)]
@@ -80,6 +82,11 @@ enum Cmd {
         #[arg(long)]
         junit: Option<PathBuf>,
     },
+    /// Sync or validate against an OpenAPI 3.x document
+    Openapi {
+        #[command(subcommand)]
+        action: OpenApiCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -87,6 +94,21 @@ enum ImportFmt {
     /// Import a Postman v2.1 collection JSON file
     Postman {
         /// Path to the Postman collection JSON
+        file: PathBuf,
+    },
+    /// Import an Insomnia v4 export JSON file
+    Insomnia {
+        /// Path to the Insomnia export JSON
+        file: PathBuf,
+    },
+    /// Import a HAR file as request definitions
+    Har {
+        /// Path to the HAR JSON file
+        file: PathBuf,
+    },
+    /// Import a Bruno .bru request file
+    Bruno {
+        /// Path to the Bruno .bru file
         file: PathBuf,
     },
     /// Import an OpenAPI 3.x JSON or YAML file
@@ -112,6 +134,24 @@ enum ExportFmt {
         #[arg(short, long)]
         output: Option<PathBuf>,
     },
+    /// Emit Markdown API documentation for the workspace
+    Markdown {
+        /// Write to this file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+    },
+    /// Emit Docker Compose for the headless mock service
+    DockerCompose {
+        /// Write to this file instead of stdout
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+        /// Host/container port to expose
+        #[arg(short, long, default_value_t = 4000)]
+        port: u16,
+        /// Host path to mount as /workspace
+        #[arg(long, default_value = ".")]
+        workspace_mount: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -122,6 +162,23 @@ enum ScenarioCmd {
     Activate {
         /// Scenario name to activate
         name: String,
+    },
+}
+
+#[derive(Subcommand)]
+enum OpenApiCmd {
+    /// Import/update request files from an OpenAPI 3.x document
+    Sync {
+        /// Path to the OpenAPI document
+        file: PathBuf,
+    },
+    /// Validate recorded JSON responses against OpenAPI response schemas
+    Drift {
+        /// Path to the OpenAPI document
+        file: PathBuf,
+        /// Number of recent history entries to inspect
+        #[arg(long, default_value_t = 100)]
+        history: usize,
     },
 }
 
@@ -149,6 +206,9 @@ fn run(cli: Cli) -> Result<(), String> {
         Cmd::Envs => envs(&root),
         Cmd::Import { format } => match format {
             ImportFmt::Postman { file } => import_postman(&root, &file),
+            ImportFmt::Insomnia { file } => import_insomnia(&root, &file),
+            ImportFmt::Har { file } => import_har(&root, &file),
+            ImportFmt::Bruno { file } => import_bruno(&root, &file),
             ImportFmt::Openapi { file } => import_openapi(&root, &file),
         },
         Cmd::Export {
@@ -157,9 +217,21 @@ fn run(cli: Cli) -> Result<(), String> {
         Cmd::Export {
             format: ExportFmt::Openapi { output },
         } => export_openapi(&root, output.as_deref()),
+        Cmd::Export {
+            format: ExportFmt::Markdown { output },
+        } => export_markdown(&root, output.as_deref()),
+        Cmd::Export {
+            format:
+                ExportFmt::DockerCompose {
+                    output,
+                    port,
+                    workspace_mount,
+                },
+        } => export_docker_compose(&workspace_mount, port, output.as_deref()),
         Cmd::Serve { port, bind } => serve(&root, &bind, port),
         Cmd::Scenario { action } => scenario(&root, action),
         Cmd::Test { env, junit } => test_workspace(&root, env.as_deref(), junit.as_deref()),
+        Cmd::Openapi { action } => openapi(&root, action),
     }
 }
 
@@ -361,6 +433,27 @@ fn import_postman(root: &std::path::Path, file: &std::path::Path) -> Result<(), 
     import_items(root, file, items)
 }
 
+fn import_insomnia(root: &std::path::Path, file: &std::path::Path) -> Result<(), String> {
+    let source =
+        std::fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
+    let items = from_insomnia_v4(&source).map_err(|e| e.to_string())?;
+    import_items(root, file, items)
+}
+
+fn import_har(root: &std::path::Path, file: &std::path::Path) -> Result<(), String> {
+    let source =
+        std::fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
+    let items = from_har(&source).map_err(|e| e.to_string())?;
+    import_items(root, file, items)
+}
+
+fn import_bruno(root: &std::path::Path, file: &std::path::Path) -> Result<(), String> {
+    let source =
+        std::fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
+    let items = from_bruno_bru(&source).map_err(|e| e.to_string())?;
+    import_items(root, file, items)
+}
+
 fn import_openapi(root: &std::path::Path, file: &std::path::Path) -> Result<(), String> {
     let source =
         std::fs::read_to_string(file).map_err(|e| format!("read {}: {e}", file.display()))?;
@@ -396,14 +489,46 @@ fn import_items(
     Ok(())
 }
 
-fn export_openapi(root: &std::path::Path, output: Option<&std::path::Path>) -> Result<(), String> {
+fn load_workspace_requests(
+    root: &std::path::Path,
+) -> Result<(Workspace, Vec<(String, RequestDefinition)>), String> {
     let ws = Workspace::open(root).map_err(|e| e.to_string())?;
     let mut requests = Vec::new();
     for entry in ws.list_requests().map_err(|e| e.to_string())? {
         let def = ws.load_request(&entry.id).map_err(|e| e.to_string())?;
         requests.push((entry.id, def));
     }
+    Ok((ws, requests))
+}
+
+fn export_openapi(root: &std::path::Path, output: Option<&std::path::Path>) -> Result<(), String> {
+    let (ws, requests) = load_workspace_requests(root)?;
     let yaml = to_openapi_yaml(&ws.manifest().name, &requests).map_err(|e| e.to_string())?;
+    if let Some(output) = output {
+        std::fs::write(output, yaml).map_err(|e| format!("write {}: {e}", output.display()))?;
+    } else {
+        print!("{yaml}");
+    }
+    Ok(())
+}
+
+fn export_markdown(root: &std::path::Path, output: Option<&std::path::Path>) -> Result<(), String> {
+    let (ws, requests) = load_workspace_requests(root)?;
+    let markdown = to_markdown_docs(&ws.manifest().name, &requests);
+    if let Some(output) = output {
+        std::fs::write(output, markdown).map_err(|e| format!("write {}: {e}", output.display()))?;
+    } else {
+        print!("{markdown}");
+    }
+    Ok(())
+}
+
+fn export_docker_compose(
+    workspace_mount: &str,
+    port: u16,
+    output: Option<&std::path::Path>,
+) -> Result<(), String> {
+    let yaml = to_docker_compose(workspace_mount, port).map_err(|e| e.to_string())?;
     if let Some(output) = output {
         std::fs::write(output, yaml).map_err(|e| format!("write {}: {e}", output.display()))?;
     } else {
@@ -425,4 +550,35 @@ fn export_curl(root: &std::path::Path, id: &str, env_name: Option<&str>) -> Resu
     let snippet = to_curl(&compose).map_err(|e| e.to_string())?;
     println!("{snippet}");
     Ok(())
+}
+
+fn openapi(root: &std::path::Path, action: OpenApiCmd) -> Result<(), String> {
+    match action {
+        OpenApiCmd::Sync { file } => import_openapi(root, &file),
+        OpenApiCmd::Drift { file, history } => {
+            let source = std::fs::read_to_string(&file)
+                .map_err(|e| format!("read {}: {e}", file.display()))?;
+            let store = History::open(root).map_err(|e| e.to_string())?;
+            let entries = store.list(history).map_err(|e| e.to_string())?;
+            let mut records = Vec::new();
+            for entry in entries {
+                records.push(store.get(entry.id).map_err(|e| e.to_string())?);
+            }
+            let issues = detect_openapi_drift(&source, &records).map_err(|e| e.to_string())?;
+            if issues.is_empty() {
+                println!(
+                    "ok — no OpenAPI response drift found in {} history entrie(s)",
+                    records.len()
+                );
+                return Ok(());
+            }
+            for issue in &issues {
+                println!(
+                    "history #{} {} {} -> {}: {}",
+                    issue.history_id, issue.method, issue.path, issue.status, issue.message
+                );
+            }
+            Err(format!("{} OpenAPI drift issue(s) found", issues.len()))
+        }
+    }
 }

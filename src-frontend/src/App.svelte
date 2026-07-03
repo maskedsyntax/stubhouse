@@ -2,6 +2,7 @@
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { onMount } from "svelte";
   import type { Compose, HistoryReplay, RequestDefinition, ResponseDto } from "./lib/api";
+  import { pollSendResult, startSendRequest } from "./lib/api";
   import MockServerPanel from "./lib/MockServerPanel.svelte";
   import RequestPane from "./lib/RequestPane.svelte";
   import ResponsePanel from "./lib/ResponsePanel.svelte";
@@ -12,7 +13,7 @@
   function defaultReq(): Compose {
     return {
       method: "GET",
-      url: "https://httpbin.org/get",
+      url: "https://postman-echo.com/get",
       query: [],
       headers: [],
       auth: { kind: "none" },
@@ -25,12 +26,17 @@
   let description = $state("");
   let activeId: string | null = $state(null);
 
-  let response: ResponseDto | null = $state(null);
-  let error: string | null = $state(null);
-  let loading = $state(false);
+  type ResponseState =
+    | { mode: "idle"; response: null; error: null }
+    | { mode: "loading"; response: null; error: null }
+    | { mode: "response"; response: ResponseDto; error: null }
+    | { mode: "error"; response: null; error: string };
+  let responseState: ResponseState = $state({ mode: "idle", response: null, error: null });
   let mockBind = $state("127.0.0.1");
   let mockPort = $state(4000);
   let mockBusy = $state(false);
+  let sendWatchdog: number | null = null;
+  let sendToken = 0;
 
   function loadDef(def: RequestDefinition, id: string) {
     const { name: n, description: d, ...compose } = def;
@@ -38,8 +44,7 @@
     name = n;
     description = d;
     activeId = id;
-    response = null;
-    error = null;
+    responseState = { mode: "idle", response: null, error: null };
   }
 
   function loadReplay(replay: HistoryReplay) {
@@ -48,14 +53,58 @@
     description = "";
     activeId = null;
     workspace.activeId = null;
-    response = replay.response;
-    error = null;
+    responseState = { mode: "response", response: replay.response, error: null };
   }
 
-  function onSendResult(r: ResponseDto) {
-    response = r;
-    error = null;
-    workspace.refreshHistory();
+  async function sendCurrent(nextReq: Compose) {
+    const token = ++sendToken;
+    if (sendWatchdog !== null) {
+      window.clearTimeout(sendWatchdog);
+      sendWatchdog = null;
+    }
+    responseState = { mode: "loading", response: null, error: null };
+    sendWatchdog = window.setTimeout(() => {
+      if (token === sendToken) {
+        sendToken += 1;
+        responseState = {
+          mode: "error",
+          response: null,
+          error: "Request timed out after 15 seconds. StubHouse did not receive the response in the UI.",
+        };
+      }
+    }, 15_000);
+    try {
+      const requestId = await startSendRequest({ ...nextReq, url: nextReq.url.trim() });
+      const result = await waitForSendResult(requestId, token);
+      if (token !== sendToken) return;
+      responseState = { mode: "response", response: result, error: null };
+      void workspace.refreshHistory();
+    } catch (e) {
+      if (token !== sendToken) return;
+      responseState = {
+        mode: "error",
+        response: null,
+        error: typeof e === "string" ? e : String(e),
+      };
+    } finally {
+      if (token !== sendToken) return;
+      if (sendWatchdog !== null) {
+        window.clearTimeout(sendWatchdog);
+        sendWatchdog = null;
+      }
+    }
+  }
+
+  async function waitForSendResult(requestId: number, token: number): Promise<ResponseDto> {
+    while (token === sendToken) {
+      const result = await pollSendResult(requestId);
+      if (result.done) {
+        if (result.response) return result.response;
+        throw new Error(result.error ?? "Request failed without an error message.");
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+    }
+    throw new Error("Request superseded.");
   }
 
   // Stable color per env name — derived from string hash.
@@ -220,16 +269,16 @@
 
     <div class="flex flex-1 flex-col gap-4 overflow-auto p-4">
       <RequestPane
-        bind:loading
+        loading={responseState.mode === "loading"}
         bind:req
         bind:name
         bind:description
         {activeId}
-        onResult={onSendResult}
-        onError={(e) => { error = e; response = null; }}
+        onSend={sendCurrent}
+        onError={(e) => { responseState = { mode: "error", response: null, error: e }; }}
         onSaved={(id) => { activeId = id; }}
       />
-      <ResponsePanel {response} {error} {loading} />
+      <ResponsePanel view={responseState} />
     </div>
   </div>
 </main>

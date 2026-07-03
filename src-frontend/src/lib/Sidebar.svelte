@@ -38,7 +38,31 @@
   async function importPostmanFile() {
     const summary = await workspace.pickAndImportPostman();
     if (summary) {
-      importFlash = `Imported ${summary.imported} request${summary.imported === 1 ? "" : "s"}`;
+      importFlash = `Imported ${summary.imported} Postman request${summary.imported === 1 ? "" : "s"}`;
+      setTimeout(() => (importFlash = null), 2500);
+    }
+  }
+
+  async function importInsomniaFile() {
+    const summary = await workspace.pickAndImportInsomnia();
+    if (summary) {
+      importFlash = `Imported ${summary.imported} Insomnia request${summary.imported === 1 ? "" : "s"}`;
+      setTimeout(() => (importFlash = null), 2500);
+    }
+  }
+
+  async function importHarFile() {
+    const summary = await workspace.pickAndImportHar();
+    if (summary) {
+      importFlash = `Imported ${summary.imported} HAR request${summary.imported === 1 ? "" : "s"}`;
+      setTimeout(() => (importFlash = null), 2500);
+    }
+  }
+
+  async function importBrunoFile() {
+    const summary = await workspace.pickAndImportBruno();
+    if (summary) {
+      importFlash = `Imported ${summary.imported} Bruno request${summary.imported === 1 ? "" : "s"}`;
       setTimeout(() => (importFlash = null), 2500);
     }
   }
@@ -87,7 +111,28 @@
           title="Import Postman v2.1 collection (.json)"
           class="ui-button px-2.5 py-1 text-[11px] uppercase"
         >
-          Import
+          PM
+        </button>
+        <button
+          onclick={importInsomniaFile}
+          title="Import Insomnia v4 export (.json)"
+          class="ui-button px-2.5 py-1 text-[11px] uppercase"
+        >
+          IN
+        </button>
+        <button
+          onclick={importHarFile}
+          title="Import HAR archive (.har/.json)"
+          class="ui-button px-2.5 py-1 text-[11px] uppercase"
+        >
+          HAR
+        </button>
+        <button
+          onclick={importBrunoFile}
+          title="Import Bruno request (.bru)"
+          class="ui-button px-2.5 py-1 text-[11px] uppercase"
+        >
+          BR
         </button>
       {/if}
       <button

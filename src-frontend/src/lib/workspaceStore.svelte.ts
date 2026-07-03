@@ -3,6 +3,9 @@ import {
   activateMockScenario,
   clearHistory,
   deactivateEnv,
+  importBruno,
+  importHar,
+  importInsomnia,
   importPostman,
   listEnvs,
   listHistory,
@@ -184,6 +187,60 @@ function createStore() {
     }
   }
 
+  async function pickAndImportInsomnia(): Promise<ImportSummary | null> {
+    if (!state.info) {
+      state.error = "Open a workspace first.";
+      return null;
+    }
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name: "Insomnia v4 Export", extensions: ["json"] }],
+    });
+    if (typeof selected !== "string") return null;
+    try {
+      const summary = await importInsomnia(selected);
+      state.error = null;
+      await refresh();
+      return summary;
+    } catch (e) {
+      state.error = typeof e === "string" ? e : String(e);
+      return null;
+    }
+  }
+
+  async function pickAndImportHar(): Promise<ImportSummary | null> {
+    return await pickAndImport("HAR Archive", ["har", "json"], importHar);
+  }
+
+  async function pickAndImportBruno(): Promise<ImportSummary | null> {
+    return await pickAndImport("Bruno Request", ["bru"], importBruno);
+  }
+
+  async function pickAndImport(
+    name: string,
+    extensions: string[],
+    importer: (path: string) => Promise<ImportSummary>,
+  ): Promise<ImportSummary | null> {
+    if (!state.info) {
+      state.error = "Open a workspace first.";
+      return null;
+    }
+    const selected = await openDialog({
+      multiple: false,
+      filters: [{ name, extensions }],
+    });
+    if (typeof selected !== "string") return null;
+    try {
+      const summary = await importer(selected);
+      state.error = null;
+      await refresh();
+      return summary;
+    } catch (e) {
+      state.error = typeof e === "string" ? e : String(e);
+      return null;
+    }
+  }
+
   async function refreshHistory(): Promise<void> {
     if (!state.info) return;
     try {
@@ -287,6 +344,9 @@ function createStore() {
     startMock,
     stopMock,
     pickAndImportPostman,
+    pickAndImportInsomnia,
+    pickAndImportHar,
+    pickAndImportBruno,
     load,
     save,
   };

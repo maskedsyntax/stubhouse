@@ -1,6 +1,6 @@
 //! Importers for foreign collection formats.
 //!
-//! v1 supports Postman Collection v2.1. The mapping is best-effort:
+//! v1 supports Postman Collection v2.1 and Insomnia v4 exports. The mapping is best-effort:
 //! - folders become collection names (one level deep — nested folders are flattened
 //!   by joining with `-`)
 //! - request scripts are dropped (description is preserved, with a marker if scripts
@@ -38,6 +38,180 @@ pub fn from_postman_v21(json: &str) -> Result<Vec<ImportedRequest>, ImportError>
     let mut out = Vec::new();
     walk_items(&collection.item, "imported", &mut out);
     Ok(out)
+}
+
+pub fn from_insomnia_v4(json: &str) -> Result<Vec<ImportedRequest>, ImportError> {
+    let export: InsomniaExport = serde_json::from_str(json)?;
+    if export.export_format != 4 {
+        return Err(ImportError::Schema(format!(
+            "unsupported Insomnia export format '{}'",
+            export.export_format
+        )));
+    }
+
+    let groups: BTreeMap<String, InsomniaGroup> = export
+        .resources
+        .iter()
+        .filter_map(|resource| match resource {
+            InsomniaResource::Group(group) => Some((group.id.clone(), group.clone())),
+            _ => None,
+        })
+        .collect();
+
+    let mut out = Vec::new();
+    for resource in export.resources {
+        if let InsomniaResource::Request(request) = resource {
+            out.push(import_insomnia_request(request, &groups));
+        }
+    }
+    Ok(out)
+}
+
+pub fn from_har(source: &str) -> Result<Vec<ImportedRequest>, ImportError> {
+    let har: HarFile = serde_json::from_str(source)?;
+    let mut out = Vec::new();
+    for (idx, entry) in har.log.entries.into_iter().enumerate() {
+        let request = entry.request;
+        let parsed = url::Url::parse(&request.url).ok();
+        let name = parsed
+            .as_ref()
+            .and_then(|url| {
+                url.path_segments()
+                    .and_then(|mut segments| segments.next_back())
+                    .filter(|segment| !segment.is_empty())
+                    .map(|segment| format!("{} {}", request.method, segment))
+            })
+            .unwrap_or_else(|| format!("{} request {}", request.method, idx + 1));
+        let headers = request
+            .headers
+            .into_iter()
+            .filter(|header| !header.name.eq_ignore_ascii_case("content-length"))
+            .map(|header| (header.name, header.value))
+            .collect();
+        let mut query: Vec<(String, String)> = request
+            .query_string
+            .into_iter()
+            .map(|param| (param.name, param.value))
+            .collect();
+        if query.is_empty() {
+            if let Some(parsed) = &parsed {
+                query = parsed
+                    .query_pairs()
+                    .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                    .collect();
+            }
+        }
+        let url = parsed
+            .as_ref()
+            .map(|url| {
+                let mut clean = url.clone();
+                clean.set_query(None);
+                clean.to_string()
+            })
+            .unwrap_or(request.url);
+        let body = request
+            .post_data
+            .as_ref()
+            .map(map_har_body)
+            .unwrap_or(Body::None);
+
+        out.push(ImportedRequest {
+            collection: "har".into(),
+            slug: format!("{}-{}", idx + 1, slugify(&name)),
+            def: RequestDefinition {
+                name,
+                description: entry
+                    .started_date_time
+                    .map(|ts| format!("Imported from HAR entry captured at {ts}."))
+                    .unwrap_or_else(|| "Imported from HAR entry.".into()),
+                pre_request_script: None,
+                post_response_script: None,
+                compose: Compose {
+                    method: parse_method(&request.method),
+                    url,
+                    query,
+                    headers,
+                    auth: Auth::None,
+                    body,
+                },
+            },
+        });
+    }
+    Ok(out)
+}
+
+pub fn from_bruno_bru(source: &str) -> Result<Vec<ImportedRequest>, ImportError> {
+    let blocks = parse_bru_blocks(source);
+    let meta = blocks.get("meta");
+    let name = meta
+        .and_then(|block| bru_field(block, "name"))
+        .unwrap_or_else(|| "Imported request".into());
+    let request_block = ["get", "post", "put", "patch", "delete", "head", "options"]
+        .into_iter()
+        .find_map(|method| blocks.get(method).map(|block| (method, block)));
+    let empty = String::new();
+    let (method, request_fields) = request_block.unwrap_or(("get", &empty));
+    let url = bru_field(request_fields, "url").unwrap_or_default();
+    let headers = bru_pairs(blocks.get("headers"));
+    let query = bru_pairs(blocks.get("params:query").or_else(|| blocks.get("query")));
+    let auth = blocks
+        .get("auth:bearer")
+        .and_then(|block| bru_field(block, "token"))
+        .map(|token| Auth::Bearer { token })
+        .or_else(|| {
+            blocks.get("auth:basic").map(|block| Auth::Basic {
+                username: bru_field(block, "username").unwrap_or_default(),
+                password: bru_field(block, "password").unwrap_or_default(),
+            })
+        })
+        .or_else(|| {
+            blocks.get("auth:apikey").map(|block| Auth::ApiKey {
+                location: if bru_field(block, "placement").as_deref() == Some("queryparams") {
+                    ApiKeyLocation::Query
+                } else {
+                    ApiKeyLocation::Header
+                },
+                name: bru_field(block, "key").unwrap_or_default(),
+                value: bru_field(block, "value").unwrap_or_default(),
+            })
+        })
+        .unwrap_or(Auth::None);
+    let body = blocks
+        .get("body:json")
+        .map(|body| Body::Json {
+            text: body.trim().to_string(),
+        })
+        .or_else(|| {
+            blocks.get("body:text").map(|body| Body::Text {
+                content_type: "text/plain".into(),
+                text: body.trim().to_string(),
+            })
+        })
+        .or_else(|| {
+            blocks.get("body:form-urlencoded").map(|_| Body::Form {
+                fields: bru_pairs(blocks.get("body:form-urlencoded")),
+            })
+        })
+        .unwrap_or(Body::None);
+
+    Ok(vec![ImportedRequest {
+        collection: "bruno".into(),
+        slug: slugify(&name),
+        def: RequestDefinition {
+            name,
+            description: "Imported from Bruno .bru file.".into(),
+            pre_request_script: None,
+            post_response_script: None,
+            compose: Compose {
+                method: parse_method(method),
+                url,
+                query,
+                headers,
+                auth,
+                body,
+            },
+        },
+    }])
 }
 
 pub fn from_openapi3(source: &str) -> Result<Vec<ImportedRequest>, ImportError> {
@@ -312,6 +486,235 @@ fn map_body(b: &PostmanBody) -> Body {
     }
 }
 
+fn import_insomnia_request(
+    request: InsomniaRequest,
+    groups: &BTreeMap<String, InsomniaGroup>,
+) -> ImportedRequest {
+    let collection = insomnia_collection(request.parent_id.as_deref(), groups);
+    let name = if request.name.trim().is_empty() {
+        "Imported request".to_string()
+    } else {
+        request.name
+    };
+    let body = request
+        .body
+        .as_ref()
+        .map(map_insomnia_body)
+        .unwrap_or(Body::None);
+    ImportedRequest {
+        collection,
+        slug: slugify(&name),
+        def: RequestDefinition {
+            name,
+            description: request.description.unwrap_or_default(),
+            pre_request_script: None,
+            post_response_script: None,
+            compose: Compose {
+                method: parse_method(&request.method),
+                url: request.url,
+                query: request
+                    .parameters
+                    .into_iter()
+                    .filter(|param| !param.disabled.unwrap_or(false))
+                    .map(|param| {
+                        (
+                            param.name.unwrap_or_default(),
+                            param.value.unwrap_or_default(),
+                        )
+                    })
+                    .collect(),
+                headers: request
+                    .headers
+                    .into_iter()
+                    .filter(|header| !header.disabled.unwrap_or(false))
+                    .map(|header| {
+                        (
+                            header.name.unwrap_or_default(),
+                            header.value.unwrap_or_default(),
+                        )
+                    })
+                    .collect(),
+                auth: request
+                    .authentication
+                    .as_ref()
+                    .map(map_insomnia_auth)
+                    .unwrap_or(Auth::None),
+                body,
+            },
+        },
+    }
+}
+
+fn insomnia_collection(
+    parent_id: Option<&str>,
+    groups: &BTreeMap<String, InsomniaGroup>,
+) -> String {
+    let mut parts = Vec::new();
+    let mut current = parent_id;
+    while let Some(id) = current {
+        let Some(group) = groups.get(id) else {
+            break;
+        };
+        parts.push(group.name.as_str());
+        current = group.parent_id.as_deref();
+    }
+    parts.reverse();
+    let collection = parts
+        .into_iter()
+        .map(sanitize_path_segment)
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-");
+    if collection.is_empty() {
+        "imported".into()
+    } else {
+        collection
+    }
+}
+
+fn map_insomnia_auth(auth: &InsomniaAuth) -> Auth {
+    match auth.kind.as_deref() {
+        Some("bearer") => Auth::Bearer {
+            token: auth
+                .token
+                .clone()
+                .or_else(|| auth.bearer_token.clone())
+                .unwrap_or_default(),
+        },
+        Some("basic") => Auth::Basic {
+            username: auth.username.clone().unwrap_or_default(),
+            password: auth.password.clone().unwrap_or_default(),
+        },
+        Some("apikey") => Auth::ApiKey {
+            location: if matches!(auth.add_to.as_deref(), Some("queryParams")) {
+                ApiKeyLocation::Query
+            } else {
+                ApiKeyLocation::Header
+            },
+            name: auth.key.clone().unwrap_or_default(),
+            value: auth.value.clone().unwrap_or_default(),
+        },
+        _ => Auth::None,
+    }
+}
+
+fn map_insomnia_body(body: &InsomniaBody) -> Body {
+    let mime_type = body.mime_type.as_deref().unwrap_or_default();
+    if let Some(params) = &body.params {
+        let fields = params
+            .iter()
+            .filter(|param| !param.disabled.unwrap_or(false))
+            .map(|param| {
+                (
+                    param.name.clone().unwrap_or_default(),
+                    param.value.clone().unwrap_or_default(),
+                )
+            })
+            .collect();
+        return Body::Form { fields };
+    }
+    let text = body.text.clone().unwrap_or_default();
+    if mime_type.contains("json") || looks_like_json(&text) {
+        Body::Json { text }
+    } else if text.is_empty() {
+        Body::None
+    } else {
+        Body::Text {
+            content_type: if mime_type.is_empty() {
+                "text/plain".into()
+            } else {
+                mime_type.into()
+            },
+            text,
+        }
+    }
+}
+
+fn map_har_body(post_data: &HarPostData) -> Body {
+    if !post_data.params.is_empty() {
+        return Body::Form {
+            fields: post_data
+                .params
+                .iter()
+                .map(|param| (param.name.clone(), param.value.clone().unwrap_or_default()))
+                .collect(),
+        };
+    }
+    let text = post_data.text.clone().unwrap_or_default();
+    if post_data.mime_type.contains("json") || looks_like_json(&text) {
+        Body::Json { text }
+    } else if text.is_empty() {
+        Body::None
+    } else {
+        Body::Text {
+            content_type: if post_data.mime_type.is_empty() {
+                "text/plain".into()
+            } else {
+                post_data.mime_type.clone()
+            },
+            text,
+        }
+    }
+}
+
+fn parse_bru_blocks(source: &str) -> BTreeMap<String, String> {
+    let mut blocks = BTreeMap::new();
+    let mut current: Option<(String, Vec<String>, usize)> = None;
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if let Some((name, lines, depth)) = current.as_mut() {
+            let opens = trimmed.matches('{').count();
+            let closes = trimmed.matches('}').count();
+            if *depth == 1 && trimmed == "}" {
+                let key = name.clone();
+                blocks.insert(key, lines.join("\n"));
+                current = None;
+                continue;
+            }
+            lines.push(line.to_string());
+            *depth = depth.saturating_add(opens).saturating_sub(closes);
+            continue;
+        }
+        if let Some(name) = trimmed.strip_suffix('{') {
+            current = Some((name.trim().to_ascii_lowercase(), Vec::new(), 1));
+        }
+    }
+    blocks
+}
+
+fn bru_field(block: &str, key: &str) -> Option<String> {
+    block.lines().find_map(|line| {
+        let trimmed = line.trim();
+        let (name, value) = trimmed.split_once(':')?;
+        if name.trim().eq_ignore_ascii_case(key) {
+            Some(value.trim().trim_matches('"').to_string())
+        } else {
+            None
+        }
+    })
+}
+
+fn bru_pairs(block: Option<&String>) -> Vec<(String, String)> {
+    block
+        .map(|block| {
+            block
+                .lines()
+                .filter_map(|line| {
+                    let trimmed = line.trim();
+                    if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('~') {
+                        return None;
+                    }
+                    let (key, value) = trimmed.split_once(':')?;
+                    Some((
+                        key.trim().to_string(),
+                        value.trim().trim_matches('"').to_string(),
+                    ))
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 fn looks_like_json(s: &str) -> bool {
     let trimmed = s.trim_start();
     trimmed.starts_with('{') || trimmed.starts_with('[')
@@ -546,6 +949,172 @@ struct PostmanEvent {
 struct PostmanScript {
     #[serde(default)]
     exec: Vec<String>,
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// Insomnia v4 schema (minimal subset)
+// ──────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct InsomniaExport {
+    #[serde(rename = "__export_format")]
+    export_format: u8,
+    #[serde(default)]
+    resources: Vec<InsomniaResource>,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "_type")]
+enum InsomniaResource {
+    #[serde(rename = "request")]
+    Request(InsomniaRequest),
+    #[serde(rename = "request_group")]
+    Group(InsomniaGroup),
+    #[serde(other)]
+    Other,
+}
+
+#[derive(Clone, Deserialize)]
+struct InsomniaGroup {
+    #[serde(rename = "_id")]
+    id: String,
+    #[serde(default)]
+    #[serde(rename = "parentId")]
+    parent_id: Option<String>,
+    #[serde(default)]
+    name: String,
+}
+
+#[derive(Deserialize)]
+struct InsomniaRequest {
+    #[serde(default)]
+    #[serde(rename = "parentId")]
+    parent_id: Option<String>,
+    #[serde(default)]
+    name: String,
+    #[serde(default = "default_method")]
+    method: String,
+    #[serde(default)]
+    url: String,
+    #[serde(default)]
+    description: Option<String>,
+    #[serde(default)]
+    headers: Vec<InsomniaPair>,
+    #[serde(default)]
+    parameters: Vec<InsomniaPair>,
+    #[serde(default)]
+    authentication: Option<InsomniaAuth>,
+    #[serde(default)]
+    body: Option<InsomniaBody>,
+}
+
+#[derive(Deserialize)]
+struct InsomniaPair {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    value: Option<String>,
+    #[serde(default)]
+    disabled: Option<bool>,
+}
+
+#[derive(Deserialize)]
+struct InsomniaAuth {
+    #[serde(rename = "type")]
+    #[serde(default)]
+    kind: Option<String>,
+    #[serde(default)]
+    token: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "bearerToken")]
+    bearer_token: Option<String>,
+    #[serde(default)]
+    username: Option<String>,
+    #[serde(default)]
+    password: Option<String>,
+    #[serde(default)]
+    key: Option<String>,
+    #[serde(default)]
+    value: Option<String>,
+    #[serde(default)]
+    #[serde(rename = "addTo")]
+    add_to: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct InsomniaBody {
+    #[serde(default)]
+    #[serde(rename = "mimeType")]
+    mime_type: Option<String>,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    params: Option<Vec<InsomniaPair>>,
+}
+
+fn default_method() -> String {
+    "GET".into()
+}
+
+// ──────────────────────────────────────────────────────────────────────
+// HAR schema (minimal subset)
+// ──────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+struct HarFile {
+    log: HarLog,
+}
+
+#[derive(Deserialize)]
+struct HarLog {
+    #[serde(default)]
+    entries: Vec<HarEntry>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HarEntry {
+    #[serde(default)]
+    started_date_time: Option<String>,
+    request: HarRequest,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HarRequest {
+    method: String,
+    url: String,
+    #[serde(default)]
+    headers: Vec<HarNameValue>,
+    #[serde(default)]
+    query_string: Vec<HarNameValue>,
+    #[serde(default)]
+    post_data: Option<HarPostData>,
+}
+
+#[derive(Deserialize)]
+struct HarNameValue {
+    name: String,
+    #[serde(default)]
+    value: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HarPostData {
+    #[serde(default)]
+    mime_type: String,
+    #[serde(default)]
+    text: Option<String>,
+    #[serde(default)]
+    params: Vec<HarPostParam>,
+}
+
+#[derive(Deserialize)]
+struct HarPostParam {
+    name: String,
+    #[serde(default)]
+    value: Option<String>,
 }
 
 // ──────────────────────────────────────────────────────────────────────
@@ -885,6 +1454,156 @@ mod tests {
         }"#;
         let imported = from_postman_v21(json).unwrap();
         assert_eq!(imported[0].def.compose.url, "https://example.com/foo");
+    }
+
+    #[test]
+    fn imports_insomnia_v4_request_groups_and_json_body() {
+        let json = r#"{
+            "__export_format": 4,
+            "resources": [
+                {"_id":"grp_root","_type":"request_group","parentId":"wrk_1","name":"V1"},
+                {"_id":"grp_users","_type":"request_group","parentId":"grp_root","name":"Users"},
+                {
+                    "_id":"req_1",
+                    "_type":"request",
+                    "parentId":"grp_users",
+                    "name":"Create user",
+                    "method":"POST",
+                    "url":"https://api.example.com/users",
+                    "headers":[
+                        {"name":"Content-Type","value":"application/json"},
+                        {"name":"X-Skip","value":"1","disabled":true}
+                    ],
+                    "parameters":[{"name":"trace","value":"yes"}],
+                    "authentication":{"type":"bearer","token":"abc"},
+                    "body":{"mimeType":"application/json","text":"{\"name\":\"Alice\"}"}
+                }
+            ]
+        }"#;
+        let imported = from_insomnia_v4(json).unwrap();
+        assert_eq!(imported.len(), 1);
+        let r = &imported[0];
+        assert_eq!(r.collection, "v1-users");
+        assert_eq!(r.slug, "create-user");
+        assert_eq!(r.def.compose.method, Method::Post);
+        assert_eq!(r.def.compose.url, "https://api.example.com/users");
+        assert_eq!(
+            r.def.compose.headers,
+            vec![("Content-Type".into(), "application/json".into())]
+        );
+        assert_eq!(r.def.compose.query, vec![("trace".into(), "yes".into())]);
+        assert!(matches!(&r.def.compose.auth, Auth::Bearer { token } if token == "abc"));
+        assert!(matches!(&r.def.compose.body, Body::Json { text } if text.contains("Alice")));
+    }
+
+    #[test]
+    fn imports_insomnia_basic_auth_and_form_body() {
+        let json = r#"{
+            "__export_format": 4,
+            "resources": [{
+                "_id":"req_1",
+                "_type":"request",
+                "name":"Login",
+                "method":"POST",
+                "url":"https://api.example.com/login",
+                "authentication":{"type":"basic","username":"alice","password":"secret"},
+                "body":{"mimeType":"application/x-www-form-urlencoded","params":[
+                    {"name":"user","value":"alice"},
+                    {"name":"debug","value":"1","disabled":true}
+                ]}
+            }]
+        }"#;
+        let imported = from_insomnia_v4(json).unwrap();
+        assert_eq!(imported[0].collection, "imported");
+        assert!(matches!(
+            &imported[0].def.compose.auth,
+            Auth::Basic { username, password } if username == "alice" && password == "secret"
+        ));
+        assert!(matches!(
+            &imported[0].def.compose.body,
+            Body::Form { fields } if fields == &vec![("user".into(), "alice".into())]
+        ));
+    }
+
+    #[test]
+    fn rejects_non_v4_insomnia_exports() {
+        let json = r#"{"__export_format":3,"resources":[]}"#;
+        let err = from_insomnia_v4(json).unwrap_err();
+        assert!(matches!(err, ImportError::Schema(_)));
+    }
+
+    #[test]
+    fn imports_har_entries_as_requests() {
+        let json = r#"{
+            "log": {
+                "entries": [{
+                    "startedDateTime": "2026-01-01T00:00:00Z",
+                    "request": {
+                        "method": "POST",
+                        "url": "https://api.example.com/users?trace=1",
+                        "headers": [{"name":"Accept","value":"application/json"}],
+                        "queryString": [{"name":"trace","value":"1"}],
+                        "postData": {
+                            "mimeType": "application/json",
+                            "text": "{\"name\":\"Alice\"}"
+                        }
+                    }
+                }]
+            }
+        }"#;
+        let imported = from_har(json).unwrap();
+        assert_eq!(imported.len(), 1);
+        assert_eq!(imported[0].collection, "har");
+        assert_eq!(imported[0].def.compose.method, Method::Post);
+        assert_eq!(imported[0].def.compose.url, "https://api.example.com/users");
+        assert_eq!(
+            imported[0].def.compose.query,
+            vec![("trace".into(), "1".into())]
+        );
+        assert!(
+            matches!(&imported[0].def.compose.body, Body::Json { text } if text.contains("Alice"))
+        );
+    }
+
+    #[test]
+    fn imports_bruno_bru_request() {
+        let bru = r#"
+meta {
+  name: Create user
+}
+post {
+  url: https://api.example.com/users
+}
+headers {
+  Accept: application/json
+}
+params:query {
+  trace: yes
+}
+auth:bearer {
+  token: abc
+}
+body:json {
+  {"name":"Alice"}
+}
+"#;
+        let imported = from_bruno_bru(bru).unwrap();
+        assert_eq!(imported.len(), 1);
+        let request = &imported[0];
+        assert_eq!(request.collection, "bruno");
+        assert_eq!(request.slug, "create-user");
+        assert_eq!(request.def.compose.method, Method::Post);
+        assert_eq!(request.def.compose.url, "https://api.example.com/users");
+        assert_eq!(
+            request.def.compose.headers,
+            vec![("Accept".into(), "application/json".into())]
+        );
+        assert_eq!(
+            request.def.compose.query,
+            vec![("trace".into(), "yes".into())]
+        );
+        assert!(matches!(&request.def.compose.auth, Auth::Bearer { token } if token == "abc"));
+        assert!(matches!(&request.def.compose.body, Body::Json { text } if text.contains("Alice")));
     }
 
     #[test]

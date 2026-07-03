@@ -70,8 +70,25 @@ export interface RequestDefinition extends Compose {
   post_response_script?: string | null;
 }
 
-export async function sendRequest(req: Compose): Promise<ResponseDto> {
-  return await invoke<ResponseDto>("send_request", { req });
+export async function sendRequest(req: Compose, requestId?: number): Promise<ResponseDto> {
+  console.debug("stubhouse ui: invoking send_request", req.method, req.url);
+  const response = await invoke<ResponseDto>("send_request", { req, requestId: requestId ?? null });
+  console.debug("stubhouse ui: send_request resolved", response.status, response.elapsed_ms);
+  return response;
+}
+
+export interface AsyncSendResult {
+  done: boolean;
+  response: ResponseDto | null;
+  error: string | null;
+}
+
+export async function startSendRequest(req: Compose): Promise<number> {
+  return await invoke<number>("start_send_request", { req });
+}
+
+export async function pollSendResult(requestId: number): Promise<AsyncSendResult> {
+  return await invoke<AsyncSendResult>("poll_send_result", { requestId });
 }
 
 export async function openWorkspace(path: string): Promise<WorkspaceInfo> {
@@ -194,6 +211,18 @@ export interface ImportSummary {
 
 export async function importPostman(path: string): Promise<ImportSummary> {
   return await invoke<ImportSummary>("import_postman", { path });
+}
+
+export async function importInsomnia(path: string): Promise<ImportSummary> {
+  return await invoke<ImportSummary>("import_insomnia", { path });
+}
+
+export async function importHar(path: string): Promise<ImportSummary> {
+  return await invoke<ImportSummary>("import_har", { path });
+}
+
+export async function importBruno(path: string): Promise<ImportSummary> {
+  return await invoke<ImportSummary>("import_bruno", { path });
 }
 
 export interface TestAssertionResult {

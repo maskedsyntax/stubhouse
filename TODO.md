@@ -69,11 +69,12 @@ Top of list is "do next". Mark with `[x]` when done.
 - [x] Fixture files + seed data
 - [x] Recording mode (passthrough + capture to YAML)
 - [x] Sensitive data scrubbing config
-- [ ] Imports: Insomnia v4, HAR, Bruno `.bru`
+- [x] Imports: Insomnia v4
+- [x] Imports: HAR, Bruno `.bru`
 - [x] Imports: OpenAPI 3.x
-- [ ] Exports: Markdown docs, Docker Compose (headless mock service)
+- [x] Exports: Markdown docs, Docker Compose (headless mock service)
 - [x] Exports: OpenAPI 3.x
-- [ ] OpenAPI spec sync + response schema drift detection
+- [x] OpenAPI spec sync + response schema drift detection
 
 ---
 

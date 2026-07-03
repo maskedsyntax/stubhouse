@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { Compose, Method, RequestDefinition, ResponseDto } from "./api";
-  import { exportCurl, sendRequest } from "./api";
+  import type { Compose, Method, RequestDefinition } from "./api";
+  import { exportCurl } from "./api";
   import { workspace } from "./workspaceStore.svelte";
   import KeyValueTable from "./KeyValueTable.svelte";
   import AuthPane from "./AuthPane.svelte";
@@ -12,7 +12,7 @@
     name: string;
     description: string;
     activeId: string | null;
-    onResult: (r: ResponseDto) => void;
+    onSend: (req: Compose) => void;
     onError: (e: string) => void;
     onSaved: (id: string) => void;
   };
@@ -23,7 +23,7 @@
     name = $bindable(),
     description = $bindable(),
     activeId,
-    onResult,
+    onSend,
     onError,
     onSaved,
   }: Props = $props();
@@ -135,15 +135,7 @@
       );
       return;
     }
-    loading = true;
-    try {
-      const resp = await sendRequest({ ...req, url: req.url.trim() });
-      onResult(resp);
-    } catch (e) {
-      onError(typeof e === "string" ? e : String(e));
-    } finally {
-      loading = false;
-    }
+    onSend({ ...req, url: req.url.trim() });
   }
 
   function onKey(e: KeyboardEvent) {
